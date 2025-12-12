@@ -18,9 +18,11 @@
 
             <form id="signalForm">
                 <div class="control-group">
-                    <div class="input-wrapper">
+                    <div class="input-wrapper" style="position:relative;">
                         <label for="symbolInput">Symbol</label>
-                        <input type="text" id="symbolInput" value="BTCUSDT" placeholder="e.g. BTCUSDT" required>
+                        <input type="text" id="symbolInput" value="BTCUSDT" placeholder="e.g. BTCUSDT"
+                            autocomplete="off" required>
+                        <ul id="symbolDropdown" class="dropdown-list hidden"></ul>
                     </div>
                     <div class="input-wrapper">
                         <label for="intervalInput">Interval</label>

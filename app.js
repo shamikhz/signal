@@ -671,3 +671,87 @@ function renderResult(data) {
   document.querySelector("#indEMA50").textContent = ind.ema50 ? ind.ema50.toFixed(2) : "-";
   document.querySelector("#indATR").textContent = ind.atr14 ? ind.atr14.toFixed(2) : "-";
 }
+
+/* ================= 5. DROPDOWN SEARCH LOGIC ================= */
+const symbolInput = document.querySelector("#symbolInput");
+const dropdown = document.querySelector("#symbolDropdown");
+let allSymbols = [];
+
+async function fetchSymbols() {
+  try {
+    // Fetch exchange info
+    const res = await fetch("https://api.binance.com/api/v3/exchangeInfo");
+    if (!res.ok) throw new Error("Failed to fetch symbols");
+    const data = await res.json();
+
+    // Store symbols (sorting by symbol name)
+    allSymbols = data.symbols
+      .filter(s => s.status === "TRADING") // Only trading pairs
+      .map(s => ({
+        symbol: s.symbol,
+        base: s.baseAsset,
+        quote: s.quoteAsset
+      }))
+      .sort((a, b) => a.symbol.localeCompare(b.symbol));
+
+    console.log(`Loaded ${allSymbols.length} symbols from Binance.`);
+  } catch (e) {
+    console.warn("Symbol fetch error (dropdown will be empty):", e);
+  }
+}
+
+function filterSymbols(query) {
+  if (!query) {
+    return allSymbols.slice(0, 50);
+  }
+  const q = query.toUpperCase();
+  // Simple priority: starts with > includes
+  // We'll just use includes for simplicity.
+  return allSymbols.filter(s => s.symbol.includes(q)).slice(0, 50);
+}
+
+function renderDropdown(items) {
+  dropdown.innerHTML = "";
+  if (items.length === 0) {
+    dropdown.classList.add("hidden");
+    return;
+  }
+
+  items.forEach(item => {
+    const li = document.createElement("li");
+    li.innerHTML = `
+      <span class="symbol">${item.symbol}</span>
+      <span class="asset-name">${item.base}/${item.quote}</span>
+    `;
+    li.addEventListener("click", () => {
+      symbolInput.value = item.symbol;
+      dropdown.classList.add("hidden");
+    });
+    dropdown.appendChild(li);
+  });
+
+  dropdown.classList.remove("hidden");
+}
+
+// Event Listeners
+const showDropdown = () => {
+  const query = symbolInput.value.trim();
+  // filterSymbols matches top 50 if query is empty
+  const filtered = filterSymbols(query);
+  renderDropdown(filtered);
+};
+
+symbolInput.addEventListener("input", showDropdown);
+symbolInput.addEventListener("focus", showDropdown);
+symbolInput.addEventListener("click", showDropdown);
+
+// Hide dropdown when clicking outside
+document.addEventListener("click", (e) => {
+  const isClickInside = symbolInput.contains(e.target) || dropdown.contains(e.target);
+  if (!isClickInside) {
+    dropdown.classList.add("hidden");
+  }
+});
+
+// Initialize
+fetchSymbols();

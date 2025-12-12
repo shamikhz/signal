@@ -4,11 +4,15 @@
   --card-border: #23232e;
   --text-primary: #e2e8f0;
   --text-secondary: #94a3b8;
-  --accent-color: #3b82f6; /* Blue-500 */
+  --accent-color: #3b82f6;
+  /* Blue-500 */
   --accent-hover: #2563eb;
-  --success-color: #10b981; /* Emerald-500 */
-  --danger-color: #ef4444; /* Red-500 */
-  --warning-color: #f59e0b; /* Amber-500 */
+  --success-color: #10b981;
+  /* Emerald-500 */
+  --danger-color: #ef4444;
+  /* Red-500 */
+  --warning-color: #f59e0b;
+  /* Amber-500 */
   --font-family: 'Inter', system-ui, -apple-system, sans-serif;
   --radius: 12px;
   --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
@@ -45,6 +49,7 @@ h1 {
   margin-bottom: 0.5rem;
   background: linear-gradient(135deg, #fff 0%, #94a3b8 100%);
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
   letter-spacing: -0.02em;
 }
@@ -97,7 +102,8 @@ label {
   font-weight: 500;
 }
 
-input, select {
+input,
+select {
   width: 100%;
   background-color: #1e1e28;
   border: 1px solid var(--card-border);
@@ -108,7 +114,8 @@ input, select {
   transition: all 0.2s;
 }
 
-input:focus, select:focus {
+input:focus,
+select:focus {
   outline: none;
   border-color: var(--accent-color);
   box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
@@ -163,9 +170,23 @@ button:disabled {
   letter-spacing: 0.05em;
 }
 
-.signal-buy { background: rgba(16, 185, 129, 0.2); color: var(--success-color); border: 1px solid rgba(16, 185, 129, 0.3); }
-.signal-sell { background: rgba(239, 68, 68, 0.2); color: var(--danger-color); border: 1px solid rgba(239, 68, 68, 0.3); }
-.signal-hold { background: rgba(148, 163, 184, 0.2); color: var(--text-secondary); border: 1px solid rgba(148, 163, 184, 0.3); }
+.signal-buy {
+  background: rgba(16, 185, 129, 0.2);
+  color: var(--success-color);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.signal-sell {
+  background: rgba(239, 68, 68, 0.2);
+  color: var(--danger-color);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.signal-hold {
+  background: rgba(148, 163, 184, 0.2);
+  color: var(--text-secondary);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+}
 
 .grid-stats {
   display: grid;
@@ -222,7 +243,8 @@ table {
   margin-top: 1rem;
 }
 
-th, td {
+th,
+td {
   padding: 0.75rem;
   text-align: left;
   border-bottom: 1px solid var(--card-border);
@@ -242,12 +264,26 @@ tr:last-child td {
 }
 
 /* Utility */
-.hidden { display: none; }
-.error { color: var(--danger-color); text-align: center; margin-top: 1rem; }
+.hidden {
+  display: none;
+}
+
+.error {
+  color: var(--danger-color);
+  text-align: center;
+  margin-top: 1rem;
+}
 
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @media (max-width: 600px) {
@@ -255,4 +291,62 @@ tr:last-child td {
     flex-direction: column;
     align-items: stretch;
   }
+}
+
+/* Dropdown Styles */
+.dropdown-list {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  width: 100%;
+  max-height: 300px;
+  overflow-y: auto;
+  background-color: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+  margin-top: 0.5rem;
+  padding: 0;
+}
+
+.dropdown-list li {
+  padding: 0.75rem 1rem;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: background-color 0.15s;
+}
+
+.dropdown-list li:last-child {
+  border-bottom: none;
+}
+
+.dropdown-list li:hover {
+  background-color: rgba(59, 130, 246, 0.15);
+}
+
+.dropdown-list .symbol {
+  font-weight: 600;
+  color: #fff;
+}
+
+.dropdown-list .asset-name {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.dropdown-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.dropdown-list::-webkit-scrollbar-track {
+  background: var(--bg-color);
+}
+
+.dropdown-list::-webkit-scrollbar-thumb {
+  background: var(--card-border);
+  border-radius: 3px;
 }
