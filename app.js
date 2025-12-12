@@ -130,53 +130,53 @@ function crossedBelow(a, b) {
 }
 
 function TwoPoleOscillator(values, period = 20) {
-    const out = Array(values.length).fill(null);
-    if (period <= 1 || values.length < period) return out;
-    const a = Math.exp(-Math.sqrt(2) * Math.PI / period);
-    const b = 2 * a * Math.cos(Math.sqrt(2) * Math.PI / period);
-    const c2 = b;
-    const c3 = -a * a;
-    const c1 = 1 - c2 - c3;
-    const filt = Array(values.length).fill(0);
-    for (let i = 0; i < values.length; i++) {
-      if (i === 0) {
-        filt[i] = values[i];
-      } else if (i === 1) {
-        filt[i] = values[i];
-      } else {
-        filt[i] = c1 * ((values[i] + values[i - 1]) / 2) + c2 * filt[i - 1] + c3 * filt[i - 2];
-      }
-      if (i >= period) {
-        out[i] = values[i] - filt[i];
-      }
+  const out = Array(values.length).fill(null);
+  if (period <= 1 || values.length < period) return out;
+  const a = Math.exp(-Math.sqrt(2) * Math.PI / period);
+  const b = 2 * a * Math.cos(Math.sqrt(2) * Math.PI / period);
+  const c2 = b;
+  const c3 = -a * a;
+  const c1 = 1 - c2 - c3;
+  const filt = Array(values.length).fill(0);
+  for (let i = 0; i < values.length; i++) {
+    if (i === 0) {
+      filt[i] = values[i];
+    } else if (i === 1) {
+      filt[i] = values[i];
+    } else {
+      filt[i] = c1 * ((values[i] + values[i - 1]) / 2) + c2 * filt[i - 1] + c3 * filt[i - 2];
     }
-    return out;
+    if (i >= period) {
+      out[i] = values[i] - filt[i];
+    }
+  }
+  return out;
 }
 
 function SupportResistanceChannel(candles, pivotLen = 5) {
-    const n = candles.length;
-    const support = Array(n).fill(null);
-    const resistance = Array(n).fill(null);
-    let lastSupport = null;
-    let lastResistance = null;
-    for (let i = 0; i < n; i++) {
-      let isPivotHigh = true;
-      let isPivotLow = true;
-      for (let l = 1; l <= pivotLen; l++) {
-        const li = i - l;
-        const ri = i + l;
-        const left = li >= 0 ? candles[li] : candles[i];
-        const right = ri < n ? candles[ri] : candles[i];
-        if (candles[i].high <= left.high || candles[i].high <= right.high) isPivotHigh = false;
-        if (candles[i].low >= left.low || candles[i].low >= right.low) isPivotLow = false;
-        if (!isPivotHigh && !isPivotLow) break;
-      }
-      if (isPivotHigh) lastResistance = candles[i].high;
-      if (isPivotLow) lastSupport = candles[i].low;
-      resistance[i] = lastResistance;
-      support[i] = lastSupport;
+  const n = candles.length;
+  const support = Array(n).fill(null);
+  const resistance = Array(n).fill(null);
+  let lastSupport = null;
+  let lastResistance = null;
+  for (let i = 0; i < n; i++) {
+    let isPivotHigh = true;
+    let isPivotLow = true;
+    for (let l = 1; l <= pivotLen; l++) {
+      const li = i - l;
+      const ri = i + l;
+      const left = li >= 0 ? candles[li] : candles[i];
+      const right = ri < n ? candles[ri] : candles[i];
+      if (candles[i].high <= left.high || candles[i].high <= right.high) isPivotHigh = false;
+      if (candles[i].low >= left.low || candles[i].low >= right.low) isPivotLow = false;
+      if (!isPivotHigh && !isPivotLow) break;
     }
-    return { support, resistance };
+    if (isPivotHigh) lastResistance = candles[i].high;
+    if (isPivotLow) lastSupport = candles[i].low;
+    resistance[i] = lastResistance;
+    support[i] = lastSupport;
+  }
+  return { support, resistance };
 }
 
 /* ================= 2. ML LOGIC (from ml.ts) ================= */
@@ -260,13 +260,27 @@ function extractFeatures(candles) {
   const macdHist = macd.histogram[n] ?? 0;
   const atr = atr14[n] ?? 0;
 
-  const rsiNorm = (rsi - 50) / 50; 
+  const rsiNorm = (rsi - 50) / 50;
   const emaRatio = e200 ? e50 / e200 - 1 : 0;
   const macdNorm = macdHist / Math.max(price, 1e-6);
   const atrNorm = atr / Math.max(price, 1e-6);
   const aboveE50 = last.close > e50 ? 1 : 0;
 
   return [ret1, rsiNorm, emaRatio, macdNorm, atrNorm, aboveE50];
+}
+
+function checkTradeOutcome(candles, startIndex, entryPrice, stopLoss, takeProfit, isLong) {
+  for (let i = startIndex; i < candles.length; i++) {
+    const c = candles[i];
+    if (isLong) {
+      if (c.high >= takeProfit) return 1; // Win
+      if (c.low <= stopLoss) return 0;   // Loss
+    } else {
+      if (c.low <= takeProfit) return 1; // Win
+      if (c.high >= stopLoss) return 0;  // Loss
+    }
+  }
+  return null;
 }
 
 function computeMLProbability(candles) {
@@ -286,22 +300,22 @@ function computeMLProbability(candles) {
 
 function computeTradeSignal(candles) {
   if (!candles || candles.length < 60) {
-      const lastClose = candles?.[candles.length - 1]?.close ?? 0;
-      return {
-          signal: {
-              action: "hold",
-              confidence: 0,
-              entry: lastClose,
-              stopLoss: lastClose,
-              takeProfit: lastClose,
-              reasons: ["Insufficient data"]
-          },
-          indicators: {
-              ema50: null, ema200: null, rsi14: null,
-              macd: { macd: null, signal: null, histogram: null },
-              atr14: null, twoPole: null, srChannel: { support: null, resistance: null, width: null }
-          }
-      };
+    const lastClose = candles?.[candles.length - 1]?.close ?? 0;
+    return {
+      signal: {
+        action: "hold",
+        confidence: 0,
+        entry: lastClose,
+        stopLoss: lastClose,
+        takeProfit: lastClose,
+        reasons: ["Insufficient data"]
+      },
+      indicators: {
+        ema50: null, ema200: null, rsi14: null,
+        macd: { macd: null, signal: null, histogram: null },
+        atr14: null, twoPole: null, srChannel: { support: null, resistance: null, width: null }
+      }
+    };
   }
 
   const closes = candles.map((c) => c.close);
@@ -331,20 +345,20 @@ function computeTradeSignal(candles) {
   let shortScore = 0;
 
   if (E50 != null && E200 != null) {
-      if (E50 > E200) { longScore += 1; reasons.push("EMA50 > EMA200 (uptrend)"); }
-      else if (E50 < E200) { shortScore += 1; reasons.push("EMA50 < EMA200 (downtrend)"); }
+    if (E50 > E200) { longScore += 1; reasons.push("EMA50 > EMA200 (uptrend)"); }
+    else if (E50 < E200) { shortScore += 1; reasons.push("EMA50 < EMA200 (downtrend)"); }
   }
 
   if (E50 != null) {
-      if (lastClose > E50) { longScore += 0.5; reasons.push("Price > EMA50"); }
-      else { shortScore += 0.5; reasons.push("Price < EMA50"); }
+    if (lastClose > E50) { longScore += 0.5; reasons.push("Price > EMA50"); }
+    else { shortScore += 0.5; reasons.push("Price < EMA50"); }
   }
 
   if (R != null) {
-      if (R >= 50 && R <= 70) { longScore += 1; reasons.push(`RSI=${R.toFixed(1)} bullish`); }
-      else if (R <= 50 && R >= 30) { shortScore += 1; reasons.push(`RSI=${R.toFixed(1)} bearish`); }
-      if (R > 70) reasons.push("RSI overbought");
-      if (R < 30) reasons.push("RSI oversold");
+    if (R >= 50 && R <= 70) { longScore += 1; reasons.push(`RSI=${R.toFixed(1)} bullish`); }
+    else if (R <= 50 && R >= 30) { shortScore += 1; reasons.push(`RSI=${R.toFixed(1)} bearish`); }
+    if (R > 70) reasons.push("RSI overbought");
+    if (R < 30) reasons.push("RSI oversold");
   }
 
   const macdCrossUp = crossedAbove(macd.macd, macd.signal);
@@ -353,18 +367,18 @@ function computeTradeSignal(candles) {
   if (macdCrossDown || (H != null && H < 0)) { shortScore += 1; reasons.push("MACD bearish"); }
 
   if (TP != null) {
-      if (TP > 0) { longScore += 0.5; reasons.push("Oscillator bullish"); }
-      else if (TP < 0) { shortScore += 0.5; reasons.push("Oscillator bearish"); }
+    if (TP > 0) { longScore += 0.5; reasons.push("Oscillator bullish"); }
+    else if (TP < 0) { shortScore += 0.5; reasons.push("Oscillator bearish"); }
   }
 
   if (Ssupport != null || Sresistance != null) {
-      const atr = A != null ? A : Math.max(1e-6, lastClose * 0.002);
-      if (Ssupport != null && Math.abs(lastClose - Ssupport) <= 0.5 * atr) {
-          longScore += 0.5; reasons.push(`Near support ~${Ssupport.toFixed(2)}`);
-      }
-      if (Sresistance != null && Math.abs(Sresistance - lastClose) <= 0.5 * atr) {
-          shortScore += 0.5; reasons.push(`Near resistance ~${Sresistance.toFixed(2)}`);
-      }
+    const atr = A != null ? A : Math.max(1e-6, lastClose * 0.002);
+    if (Ssupport != null && Math.abs(lastClose - Ssupport) <= 0.5 * atr) {
+      longScore += 0.5; reasons.push(`Near support ~${Ssupport.toFixed(2)}`);
+    }
+    if (Sresistance != null && Math.abs(Sresistance - lastClose) <= 0.5 * atr) {
+      shortScore += 0.5; reasons.push(`Near resistance ~${Sresistance.toFixed(2)}`);
+    }
   }
 
   const scoreDiff = longScore - shortScore;
@@ -373,23 +387,23 @@ function computeTradeSignal(candles) {
   else if (scoreDiff <= -1) action = "sell";
 
   const atrMultStop = 1.5;
-  const rr = 2.2; 
+  const rr = 2.2;
   const entry = lastClose;
   let stopLoss = lastClose;
   let takeProfit = lastClose;
 
   if (A != null) {
-      const atr = A;
-      if (action === "buy") {
-          stopLoss = entry - atrMultStop * atr;
-          takeProfit = entry + rr * (entry - stopLoss);
-      } else if (action === "sell") {
-          stopLoss = entry + atrMultStop * atr;
-          takeProfit = entry - rr * (stopLoss - entry);
-      } else {
-          stopLoss = entry - atrMultStop * atr;
-          takeProfit = entry + atrMultStop * atr;
-      }
+    const atr = A;
+    if (action === "buy") {
+      stopLoss = entry - atrMultStop * atr;
+      takeProfit = entry + rr * (entry - stopLoss);
+    } else if (action === "sell") {
+      stopLoss = entry + atrMultStop * atr;
+      takeProfit = entry - rr * (stopLoss - entry);
+    } else {
+      stopLoss = entry - atrMultStop * atr;
+      takeProfit = entry + atrMultStop * atr;
+    }
   }
 
   // RR Check
@@ -398,18 +412,18 @@ function computeTradeSignal(candles) {
     const risk = Math.abs(entry - stopLoss);
     const reward = Math.abs(takeProfit - entry);
     const rewardOverRisk = risk > 0 ? reward / risk : 0;
-  
+
     if (A == null || risk <= 0 || rewardOverRisk < 2) {
       action = "hold";
       enforceHold = true;
       reasons.push("RR < 1:2; forcing HOLD");
       // Re-center
-        stopLoss = entry;
-        takeProfit = entry;
+      stopLoss = entry;
+      takeProfit = entry;
     }
   }
 
-  const indicatorsAvailable = (E50!=null?1:0)+(E200!=null?1:0)+(R!=null?1:0)+(M!=null&&S!=null?1:0)+(A!=null?1:0);
+  const indicatorsAvailable = (E50 != null ? 1 : 0) + (E200 != null ? 1 : 0) + (R != null ? 1 : 0) + (M != null && S != null ? 1 : 0) + (A != null ? 1 : 0);
   let confidence = Math.min(0.9, Math.max(0.15, Math.abs(scoreDiff) / 3));
   confidence = Math.min(confidence, 0.15 + 0.15 * indicatorsAvailable);
   if (enforceHold) confidence = Math.min(confidence, 0.15);
@@ -422,9 +436,9 @@ function computeTradeSignal(candles) {
       atr14: A,
       twoPole: TP,
       srChannel: {
-          support: Ssupport,
-          resistance: Sresistance,
-          width: (Ssupport && Sresistance) ? Math.max(Sresistance - Ssupport, 0) : null
+        support: Ssupport,
+        resistance: Sresistance,
+        width: (Ssupport && Sresistance) ? Math.max(Sresistance - Ssupport, 0) : null
       }
     }
   };
@@ -455,11 +469,11 @@ async function fetchAndAnalyze(symbol, interval) {
 
     const { signal, indicators } = computeTradeSignal(candles);
     const last = candles[candles.length - 1];
-    
+
     // Train the model on historical data (optional simplified training loop or just predict)
     // For this simple port, let's just PREDICT. Training usually happens on closed bars.
     // We could implement a "train on history" button later.
-    
+
     // Attempt auto-train on last completed bar? 
     // Let's just do prediction for now to keep it fast.
     const mlProbability = computeMLProbability(candles);
@@ -479,8 +493,55 @@ async function fetchAndAnalyze(symbol, interval) {
   }
 }
 
+async function trainModel(symbol, interval) {
+  try {
+    const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=500`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("Failed to fetch training data.");
+    const raw = await res.json();
+    const candles = parseBinanceKlines(raw);
+
+    if (candles.length < 205) throw new Error("Not enough data to train.");
+
+    let model = loadModel();
+    if (!model) {
+      // Init with dummy features
+      const dummyX = extractFeatures(candles.slice(0, 201));
+      model = new OnlineLogisticRegression(dummyX.length, 0.01);
+    }
+
+    let trainedCount = 0;
+    let totalLoss = 0;
+
+    // Walk forward
+    for (let i = 200; i < candles.length - 1; i++) {
+      const history = candles.slice(0, i + 1);
+      const x = extractFeatures(history);
+
+      const { signal } = computeTradeSignal(history);
+      const { action, stopLoss, takeProfit, entry } = signal;
+
+      if (action === "buy" && stopLoss && takeProfit) {
+        const outcome = checkTradeOutcome(candles, i + 1, entry, stopLoss, takeProfit, true);
+        if (outcome !== null) {
+          const loss = model.update(x, outcome);
+          totalLoss += loss;
+          trainedCount++;
+        }
+      }
+    }
+
+    saveModel(model);
+    return { trainedCount, avgLoss: trainedCount ? totalLoss / trainedCount : 0 };
+
+  } catch (err) {
+    throw err;
+  }
+}
+
 // UI HANDLERS
 const form = document.querySelector("#signalForm");
+const trainBtn = document.querySelector("#trainBtn");
 const loadingEl = document.querySelector("#loading");
 const resultEl = document.querySelector("#resultSection");
 const errorEl = document.querySelector("#error");
@@ -506,10 +567,31 @@ form.addEventListener("submit", async (e) => {
   }
 });
 
+trainBtn.addEventListener("click", async () => {
+  const symbol = document.querySelector("#symbolInput").value.toUpperCase();
+  const interval = document.querySelector("#intervalInput").value;
+
+  const originalText = trainBtn.textContent;
+  trainBtn.textContent = "Training...";
+  trainBtn.disabled = true;
+  errorEl.classList.add("hidden");
+
+  try {
+    const res = await trainModel(symbol, interval);
+    alert(`Training Complete!\nProcessed Trades: ${res.trainedCount}\nAvg Loss: ${res.avgLoss.toFixed(4)}\n\nThe model has been updated in Local Storage.`);
+  } catch (err) {
+    errorEl.textContent = `Training Error: ${err.message}`;
+    errorEl.classList.remove("hidden");
+  } finally {
+    trainBtn.textContent = originalText;
+    trainBtn.disabled = false;
+  }
+});
+
 function renderResult(data) {
   document.querySelector("#resSymbol").textContent = `${data.symbol} (${data.interval})`;
   document.querySelector("#resPrice").textContent = data.lastPrice.toFixed(2);
-  
+
   const date = new Date(data.timestamp);
   document.querySelector("#resTime").textContent = date.toLocaleString();
 
@@ -527,8 +609,8 @@ function renderResult(data) {
   document.querySelector("#valEntry").textContent = data.signal.entry.toFixed(2);
   document.querySelector("#valStop").textContent = data.signal.stopLoss.toFixed(2);
   document.querySelector("#valTP").textContent = data.signal.takeProfit.toFixed(2);
-  document.querySelector("#valML").textContent = typeof data.mlProbability === 'number' 
-    ? `${(data.mlProbability * 100).toFixed(1)}%` 
+  document.querySelector("#valML").textContent = typeof data.mlProbability === 'number'
+    ? `${(data.mlProbability * 100).toFixed(1)}%`
     : "N/A (Train Model)";
 
   // Reasons
