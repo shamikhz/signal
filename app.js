@@ -3,6 +3,26 @@
  * Includes: Indicators, Signal Logic, ML Logic, and UI Controller
  */
 
+/* ================= IMPORTS & FIREBASE SETUP ================= */
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
+import {
+  getFirestore, doc, getDoc, setDoc, runTransaction
+} from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBV0B_6jo8opd9dmcg9SoXNcYJKSesXlrs",
+  authDomain: "trainai-1b085.firebaseapp.com",
+  projectId: "trainai-1b085",
+  storageBucket: "trainai-1b085.firebasestorage.app",
+  messagingSenderId: "735674489344",
+  appId: "1:735674489344:web:ebd3b2feb3010f16ff56e5"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const MODEL_DOC_ID = "global_v1";
+
 /* ================= TYPES & CONSTANTS ================= */
 const ALLOWED_INTERVALS = ["1m", "5m", "15m", "30m", "1h", "4h", "1d"];
 
@@ -224,20 +244,21 @@ class OnlineLogisticRegression {
   }
 }
 
-// Persist to LocalStorage
-function loadModel() {
-  const raw = localStorage.getItem("crypto_ml_model");
-  if (!raw) return null;
+// Persist to Firestore
+async function loadGlobalModel() {
   try {
-    const obj = JSON.parse(raw);
-    return new OnlineLogisticRegression(obj.featureCount, obj.learningRate, obj);
+    const docRef = doc(db, "models", MODEL_DOC_ID);
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      const obj = docSnap.data();
+      return new OnlineLogisticRegression(obj.featureCount, obj.learningRate, obj);
+    } else {
+      return null;
+    }
   } catch (e) {
+    console.error("Error loading model:", e);
     return null;
   }
-}
-
-function saveModel(model) {
-  localStorage.setItem("crypto_ml_model", JSON.stringify(model.serialize()));
 }
 
 function extractFeatures(candles) {
@@ -283,15 +304,12 @@ function checkTradeOutcome(candles, startIndex, entryPrice, stopLoss, takeProfit
   return null;
 }
 
-function computeMLProbability(candles) {
-  const model = loadModel();
-  if (!model) return null;
+async function computeMLProbability(candles) {
+  const model = await loadGlobalModel();
+  if (!model) return null; // No shared model yet
   const x = extractFeatures(candles);
   if (model.featureCount !== x.length) {
-    // reset model if features change
-    const newModel = new OnlineLogisticRegression(x.length, model.learningRate);
-    saveModel(newModel);
-    return null;
+    return null; // Feature mismatch
   }
   return model.predictProba(x);
 }
@@ -470,13 +488,13 @@ async function fetchAndAnalyze(symbol, interval) {
     const { signal, indicators } = computeTradeSignal(candles);
     const last = candles[candles.length - 1];
 
-    // Train the model on historical data (optional simplified training loop or just predict)
-    // For this simple port, let's just PREDICT. Training usually happens on closed bars.
-    // We could implement a "train on history" button later.
-
-    // Attempt auto-train on last completed bar? 
-    // Let's just do prediction for now to keep it fast.
-    const mlProbability = computeMLProbability(candles);
+    // Fetch the shared model for prediction
+    let mlProbability = null;
+    try {
+      mlProbability = await computeMLProbability(candles);
+    } catch (e) {
+      console.warn("ML Prediction failed (maybe offline):", e);
+    }
 
     return {
       symbol,
@@ -503,35 +521,57 @@ async function trainModel(symbol, interval) {
 
     if (candles.length < 205) throw new Error("Not enough data to train.");
 
-    let model = loadModel();
-    if (!model) {
-      // Init with dummy features
-      const dummyX = extractFeatures(candles.slice(0, 201));
-      model = new OnlineLogisticRegression(dummyX.length, 0.01);
-    }
-
+    // Run transaction: read global, update, write global
     let trainedCount = 0;
     let totalLoss = 0;
 
-    // Walk forward
-    for (let i = 200; i < candles.length - 1; i++) {
-      const history = candles.slice(0, i + 1);
-      const x = extractFeatures(history);
+    const docRef = doc(db, "models", MODEL_DOC_ID);
 
-      const { signal } = computeTradeSignal(history);
-      const { action, stopLoss, takeProfit, entry } = signal;
+    await runTransaction(db, async (transaction) => {
+      const docSnap = await transaction.get(docRef);
+      let model;
 
-      if (action === "buy" && stopLoss && takeProfit) {
-        const outcome = checkTradeOutcome(candles, i + 1, entry, stopLoss, takeProfit, true);
-        if (outcome !== null) {
-          const loss = model.update(x, outcome);
-          totalLoss += loss;
-          trainedCount++;
+      if (!docSnap.exists()) {
+        // Init with dummy features
+        const dummyX = extractFeatures(candles.slice(0, 201));
+        model = new OnlineLogisticRegression(dummyX.length, 0.01);
+      } else {
+        const obj = docSnap.data();
+        model = new OnlineLogisticRegression(obj.featureCount, obj.learningRate, obj);
+      }
+
+      // Feature count check
+      const checkX = extractFeatures(candles.slice(0, 201));
+      if (model.featureCount !== checkX.length) {
+        // Reset if features are different (breaking change)
+        model = new OnlineLogisticRegression(checkX.length, 0.01);
+      }
+
+      trainedCount = 0;
+      totalLoss = 0;
+
+      // Walk forward training on the shared model
+      for (let i = 200; i < candles.length - 1; i++) {
+        const history = candles.slice(0, i + 1);
+        const x = extractFeatures(history);
+
+        const { signal } = computeTradeSignal(history);
+        const { action, stopLoss, takeProfit, entry } = signal;
+
+        if (action === "buy" && stopLoss && takeProfit) {
+          const outcome = checkTradeOutcome(candles, i + 1, entry, stopLoss, takeProfit, true);
+          if (outcome !== null) {
+            const loss = model.update(x, outcome);
+            totalLoss += loss;
+            trainedCount++;
+          }
         }
       }
-    }
 
-    saveModel(model);
+      // Write back updated weights
+      transaction.set(docRef, model.serialize());
+    });
+
     return { trainedCount, avgLoss: trainedCount ? totalLoss / trainedCount : 0 };
 
   } catch (err) {
@@ -562,6 +602,7 @@ form.addEventListener("submit", async (e) => {
   } catch (err) {
     errorEl.textContent = `Error: ${err.message}`;
     errorEl.classList.remove("hidden");
+    console.error(err);
   } finally {
     loadingEl.classList.add("hidden");
   }
@@ -572,16 +613,17 @@ trainBtn.addEventListener("click", async () => {
   const interval = document.querySelector("#intervalInput").value;
 
   const originalText = trainBtn.textContent;
-  trainBtn.textContent = "Training...";
+  trainBtn.textContent = "Training (Shared)...";
   trainBtn.disabled = true;
   errorEl.classList.add("hidden");
 
   try {
     const res = await trainModel(symbol, interval);
-    alert(`Training Complete!\nProcessed Trades: ${res.trainedCount}\nAvg Loss: ${res.avgLoss.toFixed(4)}\n\nThe model has been updated in Local Storage.`);
+    alert(`Shared Training Complete!\nProcessed Trades: ${res.trainedCount}\nAvg Loss: ${res.avgLoss.toFixed(4)}\n\nThe global model in Firestore has been updated.`);
   } catch (err) {
     errorEl.textContent = `Training Error: ${err.message}`;
     errorEl.classList.remove("hidden");
+    console.error(err);
   } finally {
     trainBtn.textContent = originalText;
     trainBtn.disabled = false;
