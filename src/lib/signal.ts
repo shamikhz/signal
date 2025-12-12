@@ -1,5 +1,5 @@
 import { Candle, IndicatorsSummary, TradeSignal } from "@/lib/types";
-import { EMA, RSI, MACDSeries, ATR, crossedAbove, crossedBelow } from "@/lib/indicators";
+import { EMA, RSI, MACDSeries, ATR, crossedAbove, crossedBelow, TwoPoleOscillator, SupportResistanceChannel } from "@/lib/indicators";
 
 /**
  * Compute a rule-based trade signal and summarize indicators.
@@ -22,7 +22,9 @@ export function computeTradeSignal(candles: Candle[]): { signal: TradeSignal; in
         ema200: null,
         rsi14: null,
         macd: { macd: null, signal: null, histogram: null },
-        atr14: null
+        atr14: null,
+        twoPole: null,
+        srChannel: { support: null, resistance: null, width: null }
       }
     };
   }
@@ -33,6 +35,8 @@ export function computeTradeSignal(candles: Candle[]): { signal: TradeSignal; in
   const rsi14 = RSI(closes, 14);
   const macd = MACDSeries(closes, 12, 26, 9);
   const atr14 = ATR(candles, 14);
+  const twoPole = TwoPoleOscillator(closes, 20);
+  const sr = SupportResistanceChannel(candles, 5);
 
   const n = candles.length - 1;
   const lastClose = closes[n];
@@ -43,6 +47,9 @@ export function computeTradeSignal(candles: Candle[]): { signal: TradeSignal; in
   const S = macd.signal[n];
   const H = macd.histogram[n];
   const A = atr14[n];
+  const TP = twoPole[n];
+  const Ssupport = sr.support[n];
+  const Sresistance = sr.resistance[n];
 
   const reasons: string[] = [];
   let longScore = 0;
@@ -77,6 +84,21 @@ export function computeTradeSignal(candles: Candle[]): { signal: TradeSignal; in
   if (macdCrossUp || (H != null && (H as number) > 0)) { longScore += 1; reasons.push("MACD bullish"); }
   if (macdCrossDown || (H != null && (H as number) < 0)) { shortScore += 1; reasons.push("MACD bearish"); }
 
+  if (TP != null) {
+    if ((TP as number) > 0) { longScore += 0.5; reasons.push("Two-pole oscillator bullish"); }
+    else if ((TP as number) < 0) { shortScore += 0.5; reasons.push("Two-pole oscillator bearish"); }
+  }
+
+  if (Ssupport != null || Sresistance != null) {
+    const atr = A != null ? (A as number) : Math.max(1e-6, lastClose * 0.002);
+    if (Ssupport != null && Math.abs(lastClose - (Ssupport as number)) <= 0.5 * atr) {
+      longScore += 0.5; reasons.push(`Near support ~${(Ssupport as number).toFixed(2)}`);
+    }
+    if (Sresistance != null && Math.abs((Sresistance as number) - lastClose) <= 0.5 * atr) {
+      shortScore += 0.5; reasons.push(`Near resistance ~${(Sresistance as number).toFixed(2)}`);
+    }
+  }
+
   const scoreDiff = longScore - shortScore;
   let action: "buy" | "sell" | "hold" = "hold";
   if (scoreDiff >= 1) action = "buy";
@@ -84,8 +106,8 @@ export function computeTradeSignal(candles: Candle[]): { signal: TradeSignal; in
 
   // Price levels via ATR-based volatility stops
   const atrMultStop = 1.5;
-  const rr = 2.0; // risk-reward ratio for take profit
-  let entry = lastClose;
+  const rr = 2.2; // desired RR
+  const entry = lastClose;
   let stopLoss = lastClose;
   let takeProfit = lastClose;
 
@@ -98,9 +120,32 @@ export function computeTradeSignal(candles: Candle[]): { signal: TradeSignal; in
       stopLoss = entry + atrMultStop * atr;
       takeProfit = entry - rr * (stopLoss - entry);
     } else {
-      // hold: approximate neutral levels
+      // hold: neutral levels
       stopLoss = entry - atrMultStop * atr;
       takeProfit = entry + atrMultStop * atr;
+    }
+  }
+
+  // Enforce minimum risk-to-reward of 1:2
+  let enforceHoldDueToRRR = false;
+  if (action !== "hold") {
+    const risk = Math.abs(entry - stopLoss);
+    const reward = Math.abs(takeProfit - entry);
+    const rewardOverRisk = risk > 0 ? reward / risk : 0;
+  
+    if (A == null || risk <= 0 || rewardOverRisk < 2) {
+      action = "hold";
+      enforceHoldDueToRRR = true;
+      reasons.push("Risk-to-reward below 1:2; forcing HOLD");
+      // Re-center levels
+      if (A != null) {
+        const atr = A as number;
+        stopLoss = entry - atrMultStop * atr;
+        takeProfit = entry + atrMultStop * atr;
+      } else {
+        stopLoss = entry;
+        takeProfit = entry;
+      }
     }
   }
 
@@ -113,7 +158,10 @@ export function computeTradeSignal(candles: Candle[]): { signal: TradeSignal; in
     (A != null ? 1 : 0);
 
   let confidence = Math.min(0.9, Math.max(0.15, Math.abs(scoreDiff) / 3));
-  confidence = Math.min(confidence, 0.15 + 0.15 * indicatorsAvailable); // cap by indicator coverage
+  confidence = Math.min(confidence, 0.15 + 0.15 * indicatorsAvailable);
+  if (enforceHoldDueToRRR) {
+    confidence = Math.min(confidence, 0.15);
+  }
 
   const indicators: IndicatorsSummary = {
     ema50: E50 ?? null,
@@ -121,6 +169,12 @@ export function computeTradeSignal(candles: Candle[]): { signal: TradeSignal; in
     rsi14: R ?? null,
     macd: { macd: M ?? null, signal: S ?? null, histogram: H ?? null },
     atr14: A ?? null,
+    twoPole: TP ?? null,
+    srChannel: {
+      support: Ssupport ?? null,
+      resistance: Sresistance ?? null,
+      width: Ssupport != null && Sresistance != null ? Math.max((Sresistance as number) - (Ssupport as number), 0) : null,
+    }
   };
 
   return {

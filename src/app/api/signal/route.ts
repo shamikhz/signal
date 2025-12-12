@@ -1,22 +1,26 @@
 import { NextResponse } from "next/server";
 import { Candle, SignalResponse } from "@/lib/types";
 import { computeTradeSignal } from "@/lib/signal";
+import { computeMLProbability } from "@/lib/ml";
 
 export const dynamic = "force-dynamic"; // avoid static caching
 
-const ALLOWED_INTERVALS = new Set(["1m", "5m", "15m", "1h", "4h", "1d"]);
+const ALLOWED_INTERVALS = new Set(["1m", "5m", "15m", "30m", "1h", "4h", "1d"]);
 
-function parseBinanceKlines(raw: any[]): Candle[] {
+function parseBinanceKlines(raw: unknown[]): Candle[] {
   // Binance kline: [ openTime, open, high, low, close, volume, closeTime, ...]
-  return raw.map((k) => ({
-    openTime: Number(k[0]),
-    open: Number(k[1]),
-    high: Number(k[2]),
-    low: Number(k[3]),
-    close: Number(k[4]),
-    volume: Number(k[5]),
-    closeTime: Number(k[6]),
-  }));
+  return raw.map((k) => {
+    const t = k as [number | string, number | string, number | string, number | string, number | string, number | string, number | string, ...unknown[]];
+    return {
+      openTime: Number(t[0]),
+      open: Number(t[1]),
+      high: Number(t[2]),
+      low: Number(t[3]),
+      close: Number(t[4]),
+      volume: Number(t[5]),
+      closeTime: Number(t[6]),
+    };
+  });
 }
 
 export async function GET(req: Request) {
@@ -41,6 +45,8 @@ export async function GET(req: Request) {
     const { signal, indicators } = computeTradeSignal(candles);
     const last = candles[candles.length - 1];
 
+    const mlProbability = computeMLProbability(candles) ?? undefined;
+
     const body: SignalResponse = {
       symbol,
       interval,
@@ -48,10 +54,12 @@ export async function GET(req: Request) {
       lastPrice: last.close,
       signal,
       indicators,
+      mlProbability,
     };
 
     return NextResponse.json(body);
-  } catch (err: any) {
-    return NextResponse.json({ error: err?.message || "Unknown error" }, { status: 500 });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

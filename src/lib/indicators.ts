@@ -147,3 +147,53 @@ export function crossedBelow(a: (number | null)[], b: (number | null)[]): boolea
   if (n < 1 || a[n] == null || b[n] == null || a[n - 1] == null || b[n - 1] == null) return false;
   return (a[n - 1] as number) >= (b[n - 1] as number) && (a[n] as number) < (b[n] as number);
 }
+
+export function TwoPoleOscillator(values: number[], period = 20): (number | null)[] {
+  const out: (number | null)[] = Array(values.length).fill(null);
+  if (period <= 1 || values.length < period) return out;
+  const a = Math.exp(-Math.sqrt(2) * Math.PI / period);
+  const b = 2 * a * Math.cos(Math.sqrt(2) * Math.PI / period);
+  const c2 = b;
+  const c3 = -a * a;
+  const c1 = 1 - c2 - c3;
+  const filt: number[] = Array(values.length).fill(0);
+  for (let i = 0; i < values.length; i++) {
+    if (i === 0) {
+      filt[i] = values[i];
+    } else if (i === 1) {
+      filt[i] = values[i];
+    } else {
+      filt[i] = c1 * ((values[i] + values[i - 1]) / 2) + c2 * filt[i - 1] + c3 * filt[i - 2];
+    }
+    if (i >= period) {
+      out[i] = values[i] - filt[i];
+    }
+  }
+  return out;
+}
+
+export function SupportResistanceChannel(candles: Candle[], pivotLen = 5): { support: (number | null)[]; resistance: (number | null)[] } {
+  const n = candles.length;
+  const support: (number | null)[] = Array(n).fill(null);
+  const resistance: (number | null)[] = Array(n).fill(null);
+  let lastSupport: number | null = null;
+  let lastResistance: number | null = null;
+  for (let i = 0; i < n; i++) {
+    let isPivotHigh = true;
+    let isPivotLow = true;
+    for (let l = 1; l <= pivotLen; l++) {
+      const li = i - l;
+      const ri = i + l;
+      const left = li >= 0 ? candles[li] : candles[i];
+      const right = ri < n ? candles[ri] : candles[i];
+      if (candles[i].high <= left.high || candles[i].high <= right.high) isPivotHigh = false;
+      if (candles[i].low >= left.low || candles[i].low >= right.low) isPivotLow = false;
+      if (!isPivotHigh && !isPivotLow) break;
+    }
+    if (isPivotHigh) lastResistance = candles[i].high;
+    if (isPivotLow) lastSupport = candles[i].low;
+    resistance[i] = lastResistance;
+    support[i] = lastSupport;
+  }
+  return { support, resistance };
+}

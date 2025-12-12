@@ -24,6 +24,12 @@ export type IndicatorsSummary = {
     histogram: number | null;
   };
   atr14: number | null;
+  twoPole: number | null;
+  srChannel: {
+    support: number | null;
+    resistance: number | null;
+    width: number | null;
+  };
 };
 
 export type TradeSignal = {
@@ -42,4 +48,5 @@ export type SignalResponse = {
   lastPrice: number;
   signal: TradeSignal;
   indicators: IndicatorsSummary;
+  mlProbability?: number; // optional P(up) from ML model
 };

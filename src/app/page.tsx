@@ -20,8 +20,9 @@ export default function HomePage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Request failed");
       setResult(data);
-    } catch (err: any) {
-      setError(err?.message || "Unknown error");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -57,6 +58,7 @@ export default function HomePage() {
             <option value="1m">1m</option>
             <option value="5m">5m</option>
             <option value="15m">15m</option>
+            <option value="30m">30m</option>
             <option value="1h">1h</option>
             <option value="4h">4h</option>
             <option value="1d">1d</option>
@@ -75,6 +77,9 @@ export default function HomePage() {
             {result.symbol} — {result.interval} — {new Date(result.timestamp).toLocaleString()}
           </h2>
           <p>Last Price: <strong>{result.lastPrice.toFixed(2)}</strong></p>
+          {typeof result.mlProbability === "number" && (
+            <p>Model P(up): <strong>{(result.mlProbability * 100).toFixed(1)}%</strong></p>
+          )}
           <p>
             Action: <strong style={{
               color:
@@ -88,6 +93,16 @@ export default function HomePage() {
             <li>Stop Loss: {result.signal.stopLoss.toFixed(2)}</li>
             <li>Take Profit: {result.signal.takeProfit.toFixed(2)}</li>
           </ul>
+          {Array.isArray(result.signal.reasons) && result.signal.reasons.length > 0 && (
+            <div style={{ marginTop: 12 }}>
+              <h3>Reasons</h3>
+              <ul>
+                {result.signal.reasons.map((r, i) => (
+                  <li key={i}>{r}</li>
+                ))}
+              </ul>
+            </div>
+          )}
         </section>
       )}
     </main>
