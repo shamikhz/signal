@@ -143,3 +143,29 @@ export function computeMLProbability(candles: Candle[]): number | null {
   }
   return model.predictProba(x);
 }
+
+/**
+ * Check the outcome of a trade starting at `startIndex`.
+ * Iterates forward to find if TakeProfit or StopLoss is hit first.
+ * Returns 1 for TP, 0 for SL, or null if neither hit before end of data.
+ */
+export function checkTradeOutcome(
+  candles: Candle[],
+  startIndex: number,
+  entryPrice: number,
+  stopLoss: number,
+  takeProfit: number,
+  isLong: boolean
+): number | null {
+  for (let i = startIndex; i < candles.length; i++) {
+    const c = candles[i];
+    if (isLong) {
+      if (c.high >= takeProfit) return 1; // Win
+      if (c.low <= stopLoss) return 0;   // Loss
+    } else {
+      if (c.low <= takeProfit) return 1; // Win (short TP is lower)
+      if (c.high >= stopLoss) return 0;  // Loss (short SL is higher)
+    }
+  }
+  return null; // Open
+}

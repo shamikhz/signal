@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crypto Signal Master</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+
+    <main>
+        <div class="card">
+            <h1>Crypto Signal Master</h1>
+            <p class="subtitle">Advanced Rule-based & ML Trading Signals</p>
+
+            <form id="signalForm">
+                <div class="control-group">
+                    <div class="input-wrapper">
+                        <label for="symbolInput">Symbol</label>
+                        <input type="text" id="symbolInput" value="BTCUSDT" placeholder="e.g. BTCUSDT" required>
+                    </div>
+                    <div class="input-wrapper">
+                        <label for="intervalInput">Interval</label>
+                        <select id="intervalInput">
+                            <option value="1m">1m</option>
+                            <option value="5m">5m</option>
+                            <option value="15m">15m</option>
+                            <option value="30m">30m</option>
+                            <option value="1h" selected>1h</option>
+                            <option value="4h">4h</option>
+                            <option value="1d">1d</option>
+                        </select>
+                    </div>
+                    <button type="submit" id="submitBtn">Get Signal</button>
+                </div>
+            </form>
+            <p id="loading" class="hidden" style="text-align:center; margin-top:1rem; color:var(--accent-color);">
+                Analyzing market data...</p>
+            <p id="error" class="hidden error"></p>
+        </div>
+
+        <!-- Result Section -->
+        <section id="resultSection" class="card hidden">
+            <div class="result-header">
+                <div>
+                    <h2 id="resSymbol" style="border:none; margin:0; font-size:1.5rem;">BTCUSDT (1h)</h2>
+                    <span id="resTime" style="font-size:0.8rem; color:var(--text-secondary);"></span>
+                </div>
+                <div class="price-display">$<span id="resPrice">0.00</span></div>
+            </div>
+
+            <div style="display:flex; align-items:center; gap:1rem; margin-bottom:1.5rem;">
+                <div id="resBadge" class="signal-badge">HOLD</div>
+                <span id="resConfidence" style="font-weight:600; color:var(--text-secondary);">Conf: 0%</span>
+            </div>
+
+            <div class="grid-stats">
+                <div class="stat-item">
+                    <span class="stat-label">Entry Price</span>
+                    <div class="stat-value" style="color:var(--text-primary);">$<span id="valEntry">0.00</span></div>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Stop Loss</span>
+                    <div class="stat-value" style="color:var(--danger-color);">$<span id="valStop">0.00</span></div>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Take Profit</span>
+                    <div class="stat-value" style="color:var(--success-color);">$<span id="valTP">0.00</span></div>
+                </div>
+                <div class="stat-item" style="display:none;">
+                    <span class="stat-label">ML Bull Prob</span>
+                    <div class="stat-value" style="color:var(--accent-color);"><span id="valML">0.0%</span></div>
+                </div>
+            </div>
+
+            <h3>Signal Analysis</h3>
+            <ul id="reasonsList" class="reasons-list"></ul>
+
+            <h3 style="margin-top:1.5rem;">Technical Indicators</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Indicator</th>
+                        <th>Value</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>RSI (14)</td>
+                        <td id="indRSI">-</td>
+                    </tr>
+                    <tr>
+                        <td>MACD</td>
+                        <td id="indMACD">-</td>
+                    </tr>
+                    <tr>
+                        <td>EMA 50</td>
+                        <td id="indEMA50">-</td>
+                    </tr>
+                    <tr>
+                        <td>ATR (Volatility)</td>
+                        <td id="indATR">-</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+    </main>
+
+    <script src="app.js"></script>
+</body>
+
+</html>
