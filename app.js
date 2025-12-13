@@ -24,7 +24,7 @@ const db = getFirestore(app);
 const MODEL_DOC_ID = "global_v1";
 
 /* ================= TYPES & CONSTANTS ================= */
-const ALLOWED_INTERVALS = ["1m", "5m", "15m", "30m", "1h", "4h", "1d"];
+const ALLOWED_INTERVALS = ["1m", "5m", "15m", "30m", "1h", "4h", "1d", "1w"];
 
 /* ================= 1. INDICATORS (from indicators.ts) ================= */
 

@@ -1,36 +1,22 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Crypto Signal Master
 
-## Getting Started
+**Crypto Signal Master** is an advanced, client-side trading signal generator that combines traditional technical analysis with a **shared, decentralized Machine Learning model**.
 
-First, run the development server:
+## Key Features
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+-   **Real-Time Signals**: Fetches live market data from Binance API to generate Buy/Sell/Hold signals.
+-   **Hybrid Logic**: Uses a combination of technical indicators (RSI, MACD, EMA, ATR, Price Action) and a Logistic Regression ML model.
+-   **Shared "Hive Mind" Learning**: The unique "Train Model" feature allows any user to train the model on local browser data. The updated model weights are saved to a shared **Firebase Firestore** database, meaning every user contributes to a single, evolving global model.
+-   **Smart UI**: Hides training controls when the model effectively solves the current market context (0 loss), preventing overfitting on solved data.
+-   **Detailed Analytics**: Provides precise entry, stop-loss, and take-profit targets with 4-decimal precision, along with confidence scores and specific reasoning for every signal.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Tech Stack
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+-   **Frontend**: Vanilla HTML5, CSS3, JavaScript (ES6+ Modules).
+-   **Backend / Database**: Firebase Firestore (for storing the shared ML model).
+-   **Data Source**: Binance Public Data API.
+-   **ML Engine**: Custom `OnlineLogisticRegression` implemented in pure JavaScript.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## How to Run
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Simply open `index.html` in any modern web browser. No build step required for the core application.
