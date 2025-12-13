@@ -199,6 +199,69 @@ function SupportResistanceChannel(candles, pivotLen = 5) {
   return { support, resistance };
 }
 
+function LonesomeTheBlueSR(candles, pivotLen = 10, maxBack = 300) {
+  const n = candles.length;
+  if (n < pivotLen * 2 + 1) return { support: null, resistance: null };
+
+  const startIdx = Math.max(0, n - maxBack);
+  const pivotsHigh = [];
+  const pivotsLow = [];
+
+  // 1. Find Pivots
+  for (let i = startIdx + pivotLen; i < n - pivotLen; i++) {
+    const high = candles[i].high;
+    const low = candles[i].low;
+    let isHigh = true;
+    let isLow = true;
+
+    for (let j = 1; j <= pivotLen; j++) {
+      if (candles[i - j].high > high || candles[i + j].high > high) isHigh = false;
+      if (candles[i - j].low < low || candles[i + j].low < low) isLow = false;
+    }
+
+    if (isHigh) pivotsHigh.push({ price: high, index: i });
+    if (isLow) pivotsLow.push({ price: low, index: i });
+  }
+
+  // 2. Find Closest Support & Resistance from current price
+  const lastClose = candles[n - 1].close;
+  let closestSupport = null;
+  let closestResistance = null;
+
+  // Simple logic: Find the "strongest" or "most recent" relevant pivot levels
+  // We will take the closest Pivot High above price as Resistance
+  // And closest Pivot Low below price as Support
+  // Refinement: Pivot clusters could be better, but closest significant pivot is a good approximation for "channel" bounds.
+
+  let minDiffRes = Infinity;
+  for (const p of pivotsHigh) {
+    if (p.price > lastClose) {
+      const diff = p.price - lastClose;
+      if (diff < minDiffRes) {
+        minDiffRes = diff;
+        closestResistance = p.price;
+      }
+    }
+  }
+
+  let minDiffSup = Infinity;
+  for (const p of pivotsLow) {
+    if (p.price < lastClose) {
+      const diff = lastClose - p.price;
+      if (diff < minDiffSup) {
+        minDiffSup = diff;
+        closestSupport = p.price;
+      }
+    }
+  }
+
+  // Fallback: if no pivot above/below, maybe use the recent extremes
+  if (closestResistance === null) closestResistance = Math.max(...candles.slice(-pivotLen).map(c => c.high));
+  if (closestSupport === null) closestSupport = Math.min(...candles.slice(-pivotLen).map(c => c.low));
+
+  return { support: closestSupport, resistance: closestResistance };
+}
+
 /* ================= 2. ML LOGIC (from ml.ts) ================= */
 
 class OnlineLogisticRegression {
@@ -331,7 +394,8 @@ function computeTradeSignal(candles) {
       indicators: {
         ema50: null, ema200: null, rsi14: null,
         macd: { macd: null, signal: null, histogram: null },
-        atr14: null, twoPole: null, srChannel: { support: null, resistance: null, width: null }
+        atr14: null, twoPole: null, srChannel: { support: null, resistance: null, width: null },
+        lonesomeSR: { support: null, resistance: null }
       }
     };
   }
@@ -344,6 +408,7 @@ function computeTradeSignal(candles) {
   const atr14 = ATR(candles, 14);
   const twoPole = TwoPoleOscillator(closes, 20);
   const sr = SupportResistanceChannel(candles, 5);
+  const lonesomeSR = LonesomeTheBlueSR(candles, 10, 300);
 
   const n = candles.length - 1;
   const lastClose = closes[n];
@@ -453,6 +518,10 @@ function computeTradeSignal(candles) {
       macd: { macd: M, signal: S, histogram: H },
       atr14: A,
       twoPole: TP,
+      lonesomeSR: {
+        support: lonesomeSR.support,
+        resistance: lonesomeSR.resistance
+      },
       srChannel: {
         support: Ssupport,
         resistance: Sresistance,
@@ -689,8 +758,8 @@ function renderResult(data) {
 
   // Stats
   document.querySelector("#valEntry").textContent = data.signal.entry.toFixed(4);
-  document.querySelector("#valStop").textContent = data.signal.stopLoss.toFixed(4);
-  document.querySelector("#valTP").textContent = data.signal.takeProfit.toFixed(4);
+  document.querySelector("#valStop").textContent = Math.max(0, data.signal.stopLoss).toFixed(4);
+  document.querySelector("#valTP").textContent = Math.max(0, data.signal.takeProfit).toFixed(4);
   document.querySelector("#valML").textContent = typeof data.mlProbability === 'number'
     ? `${(data.mlProbability * 100).toFixed(1)}%`
     : "N/A (Train Model)";
@@ -710,6 +779,13 @@ function renderResult(data) {
   document.querySelector("#indMACD").textContent = ind.macd.macd ? ind.macd.macd.toFixed(4) : "-";
   document.querySelector("#indEMA50").textContent = ind.ema50 ? ind.ema50.toFixed(4) : "-";
   document.querySelector("#indATR").textContent = ind.atr14 ? ind.atr14.toFixed(4) : "-";
+
+  // LonesomeTheBlue SR
+  const lup = ind.lonesomeSR.support !== null ? Math.max(0, ind.lonesomeSR.support) : "-";
+  const ldown = ind.lonesomeSR.resistance !== null ? Math.max(0, ind.lonesomeSR.resistance) : "-";
+
+  document.querySelector("#indLonesomeSup").textContent = typeof lup === "number" ? lup.toFixed(4) : lup;
+  document.querySelector("#indLonesomeRes").textContent = typeof ldown === "number" ? ldown.toFixed(4) : ldown;
 }
 
 /* ================= 5. DROPDOWN SEARCH LOGIC ================= */
