@@ -599,6 +599,8 @@ form.addEventListener("submit", async (e) => {
     const data = await fetchAndAnalyze(symbol, interval);
     renderResult(data);
     resultEl.classList.remove("hidden");
+    // Also update training UI just in case
+    updateTrainUI();
   } catch (err) {
     errorEl.textContent = `Error: ${err.message}`;
     errorEl.classList.remove("hidden");
@@ -607,6 +609,37 @@ form.addEventListener("submit", async (e) => {
     loadingEl.classList.add("hidden");
   }
 });
+
+/* ================= TRAIN BUTTON VISIBILITY LOGIC ================= */
+const trainStatusEl = document.querySelector("#trainStatus");
+
+function getTrainingKey(symbol, interval) {
+  return `train_loss_${symbol}_${interval}`;
+}
+
+function updateTrainUI() {
+  const symbol = document.querySelector("#symbolInput").value.toUpperCase();
+  const interval = document.querySelector("#intervalInput").value;
+  const key = getTrainingKey(symbol, interval);
+  const storedLoss = localStorage.getItem(key);
+
+  if (storedLoss !== null && parseFloat(storedLoss) === 0) {
+    trainBtn.classList.add("hidden");
+    trainStatusEl.textContent = "Model Fully Trained (Loss: 0.0000)";
+    trainStatusEl.style.display = "inline";
+  } else {
+    trainBtn.classList.remove("hidden");
+    trainStatusEl.style.display = "none";
+  }
+}
+
+// Attach listeners for UI updates
+document.querySelector("#symbolInput").addEventListener("input", updateTrainUI);
+document.querySelector("#symbolInput").addEventListener("blur", updateTrainUI);
+document.querySelector("#intervalInput").addEventListener("change", updateTrainUI);
+
+// Initial State Check
+updateTrainUI();
 
 trainBtn.addEventListener("click", async () => {
   const symbol = document.querySelector("#symbolInput").value.toUpperCase();
@@ -620,6 +653,12 @@ trainBtn.addEventListener("click", async () => {
   try {
     const res = await trainModel(symbol, interval);
     alert(`Shared Training Complete!\nProcessed Trades: ${res.trainedCount}\nAvg Loss: ${res.avgLoss.toFixed(4)}\n\nThe global model in Firestore has been updated.`);
+
+    // Save to local storage
+    const key = getTrainingKey(symbol, interval);
+    localStorage.setItem(key, res.avgLoss.toString());
+    updateTrainUI();
+
   } catch (err) {
     errorEl.textContent = `Training Error: ${err.message}`;
     errorEl.classList.remove("hidden");
@@ -632,7 +671,8 @@ trainBtn.addEventListener("click", async () => {
 
 function renderResult(data) {
   document.querySelector("#resSymbol").textContent = `${data.symbol} (${data.interval})`;
-  document.querySelector("#resPrice").textContent = data.lastPrice.toFixed(2);
+
+  document.querySelector("#resPrice").textContent = data.lastPrice.toFixed(4);
 
   const date = new Date(data.timestamp);
   document.querySelector("#resTime").textContent = date.toLocaleString();
@@ -648,9 +688,9 @@ function renderResult(data) {
   document.querySelector("#resConfidence").textContent = `Conf: ${(data.signal.confidence * 100).toFixed(0)}%`;
 
   // Stats
-  document.querySelector("#valEntry").textContent = data.signal.entry.toFixed(2);
-  document.querySelector("#valStop").textContent = data.signal.stopLoss.toFixed(2);
-  document.querySelector("#valTP").textContent = data.signal.takeProfit.toFixed(2);
+  document.querySelector("#valEntry").textContent = data.signal.entry.toFixed(4);
+  document.querySelector("#valStop").textContent = data.signal.stopLoss.toFixed(4);
+  document.querySelector("#valTP").textContent = data.signal.takeProfit.toFixed(4);
   document.querySelector("#valML").textContent = typeof data.mlProbability === 'number'
     ? `${(data.mlProbability * 100).toFixed(1)}%`
     : "N/A (Train Model)";
@@ -666,10 +706,10 @@ function renderResult(data) {
 
   // Indicators Table
   const ind = data.indicators;
-  document.querySelector("#indRSI").textContent = ind.rsi14 ? ind.rsi14.toFixed(2) : "-";
-  document.querySelector("#indMACD").textContent = ind.macd.macd ? ind.macd.macd.toFixed(2) : "-";
-  document.querySelector("#indEMA50").textContent = ind.ema50 ? ind.ema50.toFixed(2) : "-";
-  document.querySelector("#indATR").textContent = ind.atr14 ? ind.atr14.toFixed(2) : "-";
+  document.querySelector("#indRSI").textContent = ind.rsi14 ? ind.rsi14.toFixed(4) : "-";
+  document.querySelector("#indMACD").textContent = ind.macd.macd ? ind.macd.macd.toFixed(4) : "-";
+  document.querySelector("#indEMA50").textContent = ind.ema50 ? ind.ema50.toFixed(4) : "-";
+  document.querySelector("#indATR").textContent = ind.atr14 ? ind.atr14.toFixed(4) : "-";
 }
 
 /* ================= 5. DROPDOWN SEARCH LOGIC ================= */
@@ -726,6 +766,7 @@ function renderDropdown(items) {
     li.addEventListener("click", () => {
       symbolInput.value = item.symbol;
       dropdown.classList.add("hidden");
+      updateTrainUI();
     });
     dropdown.appendChild(li);
   });
