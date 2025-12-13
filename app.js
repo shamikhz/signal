@@ -738,10 +738,15 @@ trainBtn.addEventListener("click", async () => {
   }
 });
 
+function formatPrice(val) {
+  if (typeof val !== 'number') return "-";
+  return val > 50 ? val.toFixed(3) : val.toFixed(5);
+}
+
 function renderResult(data) {
   document.querySelector("#resSymbol").textContent = `${data.symbol} (${data.interval})`;
 
-  document.querySelector("#resPrice").textContent = data.lastPrice.toFixed(4);
+  document.querySelector("#resPrice").textContent = formatPrice(data.lastPrice);
 
   const date = new Date(data.timestamp);
   document.querySelector("#resTime").textContent = date.toLocaleString();
@@ -757,9 +762,9 @@ function renderResult(data) {
   document.querySelector("#resConfidence").textContent = `Conf: ${(data.signal.confidence * 100).toFixed(0)}%`;
 
   // Stats
-  document.querySelector("#valEntry").textContent = data.signal.entry.toFixed(4);
-  document.querySelector("#valStop").textContent = Math.max(0, data.signal.stopLoss).toFixed(4);
-  document.querySelector("#valTP").textContent = Math.max(0, data.signal.takeProfit).toFixed(4);
+  document.querySelector("#valEntry").textContent = formatPrice(data.signal.entry);
+  document.querySelector("#valStop").textContent = formatPrice(Math.max(0, data.signal.stopLoss));
+  document.querySelector("#valTP").textContent = formatPrice(Math.max(0, data.signal.takeProfit));
   document.querySelector("#valML").textContent = typeof data.mlProbability === 'number'
     ? `${(data.mlProbability * 100).toFixed(1)}%`
     : "N/A (Train Model)";
@@ -777,15 +782,15 @@ function renderResult(data) {
   const ind = data.indicators;
   document.querySelector("#indRSI").textContent = ind.rsi14 ? ind.rsi14.toFixed(4) : "-";
   document.querySelector("#indMACD").textContent = ind.macd.macd ? ind.macd.macd.toFixed(4) : "-";
-  document.querySelector("#indEMA50").textContent = ind.ema50 ? ind.ema50.toFixed(4) : "-";
+  document.querySelector("#indEMA50").textContent = ind.ema50 ? formatPrice(ind.ema50) : "-";
   document.querySelector("#indATR").textContent = ind.atr14 ? ind.atr14.toFixed(4) : "-";
 
   // LonesomeTheBlue SR
   const lup = ind.lonesomeSR.support !== null ? Math.max(0, ind.lonesomeSR.support) : "-";
   const ldown = ind.lonesomeSR.resistance !== null ? Math.max(0, ind.lonesomeSR.resistance) : "-";
 
-  document.querySelector("#indLonesomeSup").textContent = typeof lup === "number" ? lup.toFixed(4) : lup;
-  document.querySelector("#indLonesomeRes").textContent = typeof ldown === "number" ? ldown.toFixed(4) : ldown;
+  document.querySelector("#indLonesomeSup").textContent = typeof lup === "number" ? formatPrice(lup) : lup;
+  document.querySelector("#indLonesomeRes").textContent = typeof ldown === "number" ? formatPrice(ldown) : ldown;
 }
 
 /* ================= 5. DROPDOWN SEARCH LOGIC ================= */
