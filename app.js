@@ -511,6 +511,14 @@ function computeTradeSignal(candles) {
   confidence = Math.min(confidence, 0.15 + 0.15 * indicatorsAvailable);
   if (enforceHold) confidence = Math.min(confidence, 0.15);
 
+  // 60% Confidence Rule
+  if (confidence < 0.60 && action !== "hold") {
+    action = "hold";
+    reasons.push(`Confidence ${(confidence * 100).toFixed(1)}% < 60%`);
+    stopLoss = entry;
+    takeProfit = entry;
+  }
+
   return {
     signal: { action, confidence, entry, stopLoss, takeProfit, reasons },
     indicators: {
