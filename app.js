@@ -746,6 +746,76 @@ trainBtn.addEventListener("click", async () => {
   }
 });
 
+/* ================= MARKET OVERVIEW LOGIC ================= */
+
+async function fetchMarketData() {
+  try {
+    const res = await fetch("https://api.binance.com/api/v3/ticker/24hr");
+    if (!res.ok) throw new Error("Failed to fetch market data");
+    const data = await res.json();
+
+    // Filter for USDT pairs only and exclude leveraged tokens (UP/DOWN/BULL/BEAR)
+    const usdtPairs = data.filter(t =>
+      t.symbol.endsWith("USDT") &&
+      !t.symbol.includes("UP") &&
+      !t.symbol.includes("DOWN") &&
+      !t.symbol.includes("BULL") &&
+      !t.symbol.includes("BEAR")
+    );
+
+    // Sort by percentage change
+    const sorted = usdtPairs.sort((a, b) => parseFloat(b.priceChangePercent) - parseFloat(a.priceChangePercent));
+
+    const topGainers = sorted.slice(0, 5);
+    const topLosers = sorted.slice(-5).reverse(); // Bottom 5, reversed to show worst first
+
+    renderMarketList("topGainers", topGainers);
+    renderMarketList("topLosers", topLosers);
+
+  } catch (err) {
+    console.error("Market data error:", err);
+    document.querySelector("#topGainers").innerHTML = '<p class="error">Failed to load</p>';
+    document.querySelector("#topLosers").innerHTML = '<p class="error">Failed to load</p>';
+  }
+}
+
+function renderMarketList(elementId, items) {
+  const container = document.getElementById(elementId);
+  container.innerHTML = "";
+
+  items.forEach(item => {
+    const price = parseFloat(item.lastPrice);
+    const change = parseFloat(item.priceChangePercent);
+    const div = document.createElement("div");
+    div.className = "ticker-item";
+
+    // Format price roughly
+    const fmtPrice = price < 1 ? price.toFixed(5) : price.toFixed(2);
+
+    div.innerHTML = `
+      <span class="ticker-symbol" title="Click to analyze">${item.symbol.replace("USDT", "")}</span>
+      <span class="ticker-price">$${fmtPrice}</span>
+      <span class="ticker-change ${change >= 0 ? "change-pos" : "change-neg"}">
+        ${change > 0 ? "+" : ""}${change.toFixed(2)}%
+      </span>
+    `;
+
+    // Click to analyze
+    div.querySelector(".ticker-symbol").addEventListener("click", () => {
+      document.querySelector("#symbolInput").value = item.symbol;
+      // Trigger the signal
+      document.querySelector("#submitBtn").click();
+    });
+
+    container.appendChild(div);
+  });
+}
+
+// Initial Fetch
+fetchMarketData();
+// Refresh every 1s
+setInterval(fetchMarketData, 1000);
+
 function formatPrice(val) {
   if (typeof val !== 'number') return "-";
   return val > 50 ? val.toFixed(3) : val.toFixed(5);

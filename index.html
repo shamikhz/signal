@@ -12,10 +12,26 @@
 <body>
 
     <main>
-        <div class="card">
-            <h1>Crypto Signal Master</h1>
-            <p class="subtitle">Advanced Rule-based & ML Trading Signals</p>
+        <h1>Crypto Signal Master</h1>
+        <p class="subtitle">Advanced Rule-based & ML Trading Signals</p>
 
+        <!-- Market Overview Section -->
+        <section class="market-overview">
+            <div class="market-column">
+                <h3>🚀 Top Gainers (24h)</h3>
+                <div id="topGainers" class="ticker-list">
+                    <p class="loading-mini">Loading...</p>
+                </div>
+            </div>
+            <div class="market-column">
+                <h3>🔻 Top Losers (24h)</h3>
+                <div id="topLosers" class="ticker-list">
+                    <p class="loading-mini">Loading...</p>
+                </div>
+            </div>
+        </section>
+
+        <div class="card">
             <form id="signalForm">
                 <div class="control-group">
                     <div class="input-wrapper" style="position:relative;">
