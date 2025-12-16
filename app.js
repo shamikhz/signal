@@ -269,161 +269,163 @@ function BollingerBands(values, period = 20, stdDev = 2) {
     lower: Array(values.length).fill(null)
   };
 
-  if (values.length < period) return out;
+  if (period <= 0 || values.length < period) return out;
 
-  // SMA is middle band
   const sma = SMA(values, period);
 
   for (let i = period - 1; i < values.length; i++) {
-    const slice = values.slice(i - period + 1, i + 1);
-    const mean = sma[i];
-    const sumSqDiff = slice.reduce((a, b) => a + Math.pow(b - mean, 2), 0);
+    const avg = sma[i];
+    let sumSqDiff = 0;
+    for (let j = 0; j < period; j++) {
+      sumSqDiff += Math.pow(values[i - j] - avg, 2);
+    }
     const variance = sumSqDiff / period;
     const std = Math.sqrt(variance);
 
-    out.middle[i] = mean;
-    out.upper[i] = mean + stdDev * std;
-    out.lower[i] = mean - stdDev * std;
+    out.middle[i] = avg;
+    out.upper[i] = avg + stdDev * std;
+    out.lower[i] = avg - stdDev * std;
   }
   return out;
 }
 
 function StochasticRSI(values, rsiPeriod = 14, stochPeriod = 14, kPeriod = 3, dPeriod = 3) {
+  // 1. Calculate RSI
   const rsi = RSI(values, rsiPeriod);
-  const stochK = Array(values.length).fill(null);
-  const stochD = Array(values.length).fill(null);
+  const n = values.length;
+  const stochRSI = Array(n).fill(null);
+  const K = Array(n).fill(null);
+  const D = Array(n).fill(null);
 
-  // Need enough data for RSI + Stoch
-  if (values.length < rsiPeriod + stochPeriod) return { k: stochK, d: stochD };
+  // Need at least rsiPeriod + stochPeriod points
+  if (n < rsiPeriod + stochPeriod) return { K, D };
 
-  const stochRSI = Array(values.length).fill(null);
+  // 2. Calculate StochRSI
+  // StochRSI = (RSI - minRSI) / (maxRSI - minRSI)
+  for (let i = rsiPeriod + stochPeriod - 1; i < n; i++) {
+    let minRSI = Infinity;
+    let maxRSI = -Infinity;
 
-  for (let i = rsiPeriod + stochPeriod - 1; i < values.length; i++) {
-    // Get slice of RSI values
-    // Note: RSI array has nulls at start, so indices align
-    const rsiSlice = [];
+    // Look back stochPeriod for min/max RSI
     for (let j = 0; j < stochPeriod; j++) {
-      rsiSlice.push(rsi[i - j]);
+      const idx = i - j;
+      if (rsi[idx] < minRSI) minRSI = rsi[idx];
+      if (rsi[idx] > maxRSI) maxRSI = rsi[idx];
     }
-    const minRSI = Math.min(...rsiSlice);
-    const maxRSI = Math.max(...rsiSlice);
 
-    if (maxRSI - minRSI === 0) {
-      stochRSI[i] = 100; // Flatline max
+    if (maxRSI === minRSI) {
+      stochRSI[i] = 0; // Avoid divide by zero
     } else {
-      stochRSI[i] = ((rsi[i] - minRSI) / (maxRSI - minRSI)) * 100;
+      stochRSI[i] = (rsi[i] - minRSI) / (maxRSI - minRSI);
     }
   }
 
-  // Smooth K and D
-  const smoothK = SMA(stochRSI.map(v => v === null ? 0 : v), kPeriod); // Simple smoothing for now, ideally SMA on valid range
-  // Let's do a proper running calculation for K and D to handle nulls correctly? 
-  // Simplified: standard StochRSI often uses SMA on the StochRSI values
+  // 3. Smooth to get K (%K) -> SMA of StochRSI
+  const kLine = SMA(stochRSI.map(v => v === null ? 0 : v * 100), kPeriod); // Multiply by 100 to standard 0-100 scale
 
-  // Re-loop for correct K/D mapping avoiding 0s where null
-  for (let i = 0; i < values.length; i++) {
-    if (stochRSI[i] == null) {
-      stochK[i] = null;
-      stochD[i] = null;
+  // 4. Smooth K to get D (%D) -> SMA of K
+  const dLine = SMA(kLine, dPeriod);
+
+  // Align nulls
+  for (let i = 0; i < n; i++) {
+    if (stochRSI[i] === null) { K[i] = null; D[i] = null; }
+    else {
+      K[i] = kLine[i];
+      D[i] = dLine[i];
     }
   }
 
-  // Calculate SMA on valid StochRSI values for K
-  for (let i = rsiPeriod + stochPeriod + kPeriod - 2; i < values.length; i++) {
-    let sum = 0;
-    for (let j = 0; j < kPeriod; j++) sum += stochRSI[i - j];
-    stochK[i] = sum / kPeriod;
-  }
-
-  // Calculate SMA on K for D
-  for (let i = rsiPeriod + stochPeriod + kPeriod + dPeriod - 3; i < values.length; i++) {
-    let sum = 0;
-    for (let j = 0; j < dPeriod; j++) sum += stochK[i - j];
-    stochD[i] = sum / dPeriod;
-  }
-
-  return { k: stochK, d: stochD };
+  return { K, D };
 }
 
 function ADX(candles, period = 14) {
-  // Wilder's ADX
   const n = candles.length;
   const adx = Array(n).fill(null);
+
   if (n < period * 2) return adx;
 
-  const plusDM = Array(n).fill(0);
-  const minusDM = Array(n).fill(0);
-  const tr = Array(n).fill(0);
+  const tr = [];
+  const dmPlus = [];
+  const dmMinus = [];
 
-  for (let i = 1; i < n; i++) {
-    const c = candles[i];
-    const p = candles[i - 1];
+  // Calculate TR, +DM, -DM
+  for (let i = 0; i < n; i++) {
+    if (i === 0) {
+      tr.push(0);
+      dmPlus.push(0);
+      dmMinus.push(0);
+      continue;
+    }
 
-    const up = c.high - p.high;
-    const down = p.low - c.low;
+    const h = candles[i].high;
+    const l = candles[i].low;
+    const prevC = candles[i - 1].close;
+    const prevH = candles[i - 1].high;
+    const prevL = candles[i - 1].low;
 
-    plusDM[i] = (up > down && up > 0) ? up : 0;
-    minusDM[i] = (down > up && down > 0) ? down : 0;
+    tr.push(Math.max(h - l, Math.abs(h - prevC), Math.abs(l - prevC)));
 
-    tr[i] = Math.max(c.high - c.low, Math.abs(c.high - p.close), Math.abs(c.low - p.close));
+    const upMove = h - prevH;
+    const downMove = prevL - l;
+
+    if (upMove > downMove && upMove > 0) dmPlus.push(upMove);
+    else dmPlus.push(0);
+
+    if (downMove > upMove && downMove > 0) dmMinus.push(downMove);
+    else dmMinus.push(0);
   }
 
-  // Smooth TR, +DM, -DM (Wilder's Smoothing)
-  // First value is sum
-  let trSmooth = 0;
-  let plusDMSmooth = 0;
-  let minusDMSmooth = 0;
+  // Initial Smoothed values (SMA or simple sum for first period)
+  // Wilder uses smoothed averages. 
+  // First value = Sum of first N
+  // Next value = (Prev * (N-1) + Current) / N
 
-  for (let i = 1; i <= period; i++) {
-    trSmooth += tr[i];
-    plusDMSmooth += plusDM[i];
-    minusDMSmooth += minusDM[i];
+  const smooth = (src) => {
+    const smoothed = Array(n).fill(0);
+    let sum = 0;
+    for (let i = 0; i < src.length; i++) {
+      if (i < period) {
+        sum += src[i];
+        if (i === period - 1) smoothed[i] = sum;
+      } else {
+        smoothed[i] = smoothed[i - 1] - (smoothed[i - 1] / period) + src[i];
+      }
+    }
+    return smoothed;
+  };
+
+  const trSmooth = smooth(tr);
+  const dmPlusSmooth = smooth(dmPlus);
+  const dmMinusSmooth = smooth(dmMinus);
+
+  const diPlus = [];
+  const diMinus = [];
+  const dx = [];
+
+  for (let i = 0; i < n; i++) {
+    if (i < period - 1) {
+      diPlus.push(0); diMinus.push(0); dx.push(0);
+    } else {
+      const p = (dmPlusSmooth[i] / trSmooth[i]) * 100;
+      const m = (dmMinusSmooth[i] / trSmooth[i]) * 100;
+      diPlus.push(p);
+      diMinus.push(m);
+
+      const sumDI = p + m;
+      if (sumDI === 0) dx.push(0);
+      else dx.push(Math.abs(p - m) / sumDI * 100);
+    }
   }
 
-  // Initial Calculation
-  // We need to calculate DX for a period to get first ADX?
-  // Wilder's approach: ADX is EMA of DX.
+  // ADX is smoothed DX
+  const adxSmooth = smooth(dx);
 
-  const dx = Array(n).fill(null);
-
-  // Helper for Wilder Smoothing: prev - (prev/n) + new
-  // But standard RSI/ATR uses this. Let's use simple rolling for first segment then smoothing.
-
-  // Let's implement correct Wilder's smoothing loop from period+1
-  let prevTr = trSmooth;
-  let prevPlus = plusDMSmooth;
-  let prevMinus = minusDMSmooth;
-
-  for (let i = period + 1; i < n; i++) {
-    const currentTr = prevTr - (prevTr / period) + tr[i];
-    const currentPlus = prevPlus - (prevPlus / period) + plusDM[i];
-    const currentMinus = prevMinus - (prevMinus / period) + minusDM[i];
-
-    prevTr = currentTr;
-    prevPlus = currentPlus;
-    prevMinus = currentMinus;
-
-    const diPlus = (currentPlus / currentTr) * 100;
-    const diMinus = (currentMinus / currentTr) * 100;
-
-    const sumDi = diPlus + diMinus;
-    dx[i] = sumDi === 0 ? 0 : (Math.abs(diPlus - diMinus) / sumDi) * 100;
+  // Align (Wilder ADX usually valid after 2*period)
+  for (let i = 0; i < n; i++) {
+    if (i >= period * 2 - 1) adx[i] = adxSmooth[i];
   }
 
-  // ADX is SMA of DX over period (or smoothed)
-  // First ADX
-  let dxSum = 0;
-  let count = 0;
-  // We need 'period' amount of DX values to calculate first ADX
-  // DX starts at index 'period + 1' approx.
-  // Realistically simpler approximation used in libraries: 
-
-  // Using EMA on DX is common for ADX
-  const adxEma = EMA(dx.map(x => x === null ? 0 : x), period);
-  // Refill nulls
-  for (let i = 0; i < period * 2; i++) adxEma[i] = null;
-
-  return adxEma;
+  return adx;
 }
 
 /* ================= 2. ML LOGIC (from ml.ts) ================= */
@@ -497,11 +499,6 @@ function extractFeatures(candles) {
   const macd = MACDSeries(closes, 12, 26, 9);
   const atr14 = ATR(candles, 14);
 
-  // New Indicators
-  const bb = BollingerBands(closes, 20, 2);
-  const stoch = StochasticRSI(closes, 14, 14, 3, 3);
-  const adx = ADX(candles, 14);
-
   const last = candles[n];
   const prev = candles[n - 1] ?? last;
 
@@ -513,25 +510,13 @@ function extractFeatures(candles) {
   const macdHist = macd.histogram[n] ?? 0;
   const atr = atr14[n] ?? 0;
 
-  const bbUpper = bb.upper[n] ?? price;
-  const bbLower = bb.lower[n] ?? price;
-  const bbWidth = bbUpper - bbLower;
-  const stochK = stoch.k[n] ?? 50;
-  const adxVal = adx[n] ?? 0;
-
   const rsiNorm = (rsi - 50) / 50;
   const emaRatio = e200 ? e50 / e200 - 1 : 0;
   const macdNorm = macdHist / Math.max(price, 1e-6);
   const atrNorm = atr / Math.max(price, 1e-6);
   const aboveE50 = last.close > e50 ? 1 : 0;
 
-  // New Features
-  const bbPctB = bbWidth > 0 ? (price - bbLower) / bbWidth : 0.5; // %B
-  const bbBw = bbWidth / Math.max(bb.middle[n] ?? price, 1e-6); // Bandwidth
-  const stochNorm = (stochK - 50) / 50;
-  const adxNorm = adxVal / 100;
-
-  return [ret1, rsiNorm, emaRatio, macdNorm, atrNorm, aboveE50, bbPctB, bbBw, stochNorm, adxNorm];
+  return [ret1, rsiNorm, emaRatio, macdNorm, atrNorm, aboveE50];
 }
 
 function checkTradeOutcome(candles, startIndex, entryPrice, stopLoss, takeProfit, isLong) {
@@ -576,10 +561,7 @@ function computeTradeSignal(candles) {
         ema50: null, ema200: null, rsi14: null,
         macd: { macd: null, signal: null, histogram: null },
         atr14: null, twoPole: null, srChannel: { support: null, resistance: null, width: null },
-        lonesomeSR: { support: null, resistance: null },
-        bb: { upper: null, middle: null, lower: null },
-        stoch: { k: null, d: null },
-        adx: null
+        lonesomeSR: { support: null, resistance: null }
       }
     };
   }
@@ -593,11 +575,9 @@ function computeTradeSignal(candles) {
   const twoPole = TwoPoleOscillator(closes, 20);
   const sr = SupportResistanceChannel(candles, 5);
   const lonesomeSR = LonesomeTheBlueSR(candles, 10, 300);
-
-  // New Logic
   const bb = BollingerBands(closes, 20, 2);
-  const stoch = StochasticRSI(closes, 14, 14, 3, 3);
-  const adx = ADX(candles, 14);
+  const stochRsi = StochasticRSI(closes, 14, 14, 3, 3);
+  const adxLine = ADX(candles, 14);
 
   const n = candles.length - 1;
   const lastClose = closes[n];
@@ -614,9 +594,10 @@ function computeTradeSignal(candles) {
 
   const BB_Upper = bb.upper[n];
   const BB_Lower = bb.lower[n];
-  const StochK = stoch.k[n];
-  const StochD = stoch.d[n];
-  const ADXVal = adx[n];
+  const BB_Mid = bb.middle[n];
+  const K = stochRsi.K[n];
+  const D = stochRsi.D[n];
+  const ADXVal = adxLine[n];
 
   const reasons = [];
   let longScore = 0;
@@ -633,14 +614,10 @@ function computeTradeSignal(candles) {
   }
 
   if (R != null) {
-    // Tighter RSI ranges logic? No, keep standard but add stoch
-    if (R >= 50 && R <= 70) { longScore += 0.5; reasons.push(`RSI=${R.toFixed(1)} bullish`); }
-    else if (R <= 50 && R >= 30) { shortScore += 0.5; reasons.push(`RSI=${R.toFixed(1)} bearish`); }
-
-    // Extreme RSI
-    if (R > 75) { shortScore += 1; reasons.push("RSI > 75 (Overbought)"); } // Reversal hint
-    // if (R < 25) { longScore += 1; reasons.push("RSI < 25 (Oversold)"); } // Reversal hint
-    // Wait, trending markets can stay overbought. Let's use ADX to differentiate.
+    if (R >= 50 && R <= 70) { longScore += 1; reasons.push(`RSI=${R.toFixed(1)} bullish`); }
+    else if (R <= 50 && R >= 30) { shortScore += 1; reasons.push(`RSI=${R.toFixed(1)} bearish`); }
+    if (R > 70) reasons.push("RSI overbought");
+    if (R < 30) reasons.push("RSI oversold");
   }
 
   const macdCrossUp = crossedAbove(macd.macd, macd.signal);
@@ -663,53 +640,63 @@ function computeTradeSignal(candles) {
     }
   }
 
-  // --- New Logic Integration ---
-
-  // 1. ADX Trend Strength
-  const isTrending = ADXVal != null && ADXVal > 25;
-  if (ADXVal != null) {
-    reasons.push(`ADX=${ADXVal.toFixed(1)} (${isTrending ? "Trending" : "Ranging"})`);
-  }
-
-  // 2. Bollinger Bands
+  // --- BOLLINGER BANDS ---
   if (BB_Upper != null && BB_Lower != null) {
-    if (lastClose > BB_Upper) {
-      if (isTrending) {
-        longScore += 1; // Strong momentum breakout
-        reasons.push("Price > BB Upper (Breakout)");
-      } else {
-        shortScore += 1; // Mean reversion in range
-        reasons.push("Price > BB Upper (Overextended)");
-      }
-    } else if (lastClose < BB_Lower) {
-      if (isTrending) {
-        shortScore += 1; // Strong momentum breakdown
-        reasons.push("Price < BB Lower (Breakdown)");
-      } else {
-        longScore += 1; // Mean reversion in range
-        reasons.push("Price < BB Lower (Oversold)");
-      }
+    // Trend Confirmation if ADX is strong
+    // Mean Reversion if ADX is weak
+
+    const isStrongTrend = ADXVal != null && ADXVal > 25;
+
+    if (isStrongTrend) {
+      // Breakout Logic
+      if (lastClose > BB_Upper) { longScore += 1; reasons.push("BB Breakout (Strong Trend)"); }
+      else if (lastClose < BB_Lower) { shortScore += 1; reasons.push("BB Breakdown (Strong Trend)"); }
+    } else {
+      // Mean Reversion Logic
+      if (lastClose > BB_Upper) { shortScore += 1; reasons.push("BB Overextended (Weak Trend)"); }
+      else if (lastClose < BB_Lower) { longScore += 1; reasons.push("BB Oversold (Weak Trend)"); }
     }
+
+    // Squeeze?
+    // Width handled by ATR implicitly mostly, but we could add squeeze logic later.
   }
 
-  // 3. Stochastic RSI
-  if (StochK != null && StochD != null) {
-    if (StochK < 20 && crossedAbove(stoch.k, stoch.d)) {
-      longScore += 1.5; // Strong buy signal
+  // --- STOCH RSI ---
+  if (K != null && D != null) {
+    // Bullish Cross in Oversold
+    if (K < 20 && D < 20 && K > D && stochRsi.K[n - 1] <= stochRsi.D[n - 1]) {
+      longScore += 1.5; // Strong Signal
       reasons.push("StochRSI Bull Cross (Oversold)");
-    } else if (StochK > 80 && crossedBelow(stoch.k, stoch.d)) {
-      shortScore += 1.5; // Strong sell signal
+    }
+    // Bearish Cross in Overbought
+    else if (K > 80 && D > 80 && K < D && stochRsi.K[n - 1] >= stochRsi.D[n - 1]) {
+      shortScore += 1.5; // Strong Signal
       reasons.push("StochRSI Bear Cross (Overbought)");
+    }
+    // General momentum
+    else if (K > D) { longScore += 0.2; }
+    else if (K < D) { shortScore += 0.2; }
+  }
+
+  // --- ADX ---
+  if (ADXVal != null) {
+    if (ADXVal > 25) {
+      // Confirms trend trades
+      reasons.push(`ADX Strong Trend (${ADXVal.toFixed(1)})`);
+      // If we have a trend signal (EMA/MACD), boost it?
+      // Implicitly handled by boosting BB Breakouts above.
+    } else {
+      reasons.push(`ADX Weak Trend (${ADXVal.toFixed(1)})`);
     }
   }
 
   const scoreDiff = longScore - shortScore;
   let action = "hold";
-  if (scoreDiff >= 2) action = "buy"; // Increased threshold slightly for precision
-  else if (scoreDiff <= -2) action = "sell";
+  if (scoreDiff >= 1) action = "buy";
+  else if (scoreDiff <= -1) action = "sell";
 
   const atrMultStop = 1.5;
-  const rr = 2.0; // Slightly conservative
+  const rr = 2.2;
   const entry = lastClose;
   let stopLoss = lastClose;
   let takeProfit = lastClose;
@@ -735,19 +722,20 @@ function computeTradeSignal(candles) {
     const reward = Math.abs(takeProfit - entry);
     const rewardOverRisk = risk > 0 ? reward / risk : 0;
 
-    if (A == null || risk <= 0 || rewardOverRisk < 1.5) {
+    if (A == null || risk <= 0 || rewardOverRisk < 2) {
       action = "hold";
       enforceHold = true;
-      reasons.push("RR < 1.5; forcing HOLD");
+      reasons.push("RR < 1:2; forcing HOLD");
       // Re-center
       stopLoss = entry;
       takeProfit = entry;
     }
   }
 
-  const indicatorsAvailable = (E50 != null ? 1 : 0) + (E200 != null ? 1 : 0) + (R != null ? 1 : 0) + (M != null && S != null ? 1 : 0) + (A != null ? 1 : 0) + (BB_Upper != null ? 1 : 0) + (StochK != null ? 1 : 0);
-  let confidence = Math.min(0.95, Math.max(0.2, Math.abs(scoreDiff) / 4)); // Adjusted denominator for higher scores
-  if (enforceHold) confidence = Math.min(confidence, 0.2);
+  const indicatorsAvailable = (E50 != null ? 1 : 0) + (E200 != null ? 1 : 0) + (R != null ? 1 : 0) + (M != null && S != null ? 1 : 0) + (A != null ? 1 : 0);
+  let confidence = Math.min(0.9, Math.max(0.15, Math.abs(scoreDiff) / 3));
+  confidence = Math.min(confidence, 0.15 + 0.15 * indicatorsAvailable);
+  if (enforceHold) confidence = Math.min(confidence, 0.15);
 
   // 60% Confidence Rule
   if (confidence < 0.60 && action !== "hold") {
@@ -773,8 +761,8 @@ function computeTradeSignal(candles) {
         resistance: Sresistance,
         width: (Ssupport && Sresistance) ? Math.max(Sresistance - Ssupport, 0) : null
       },
-      bb: { upper: BB_Upper, middle: bb.middle[n], lower: BB_Lower },
-      stoch: { k: StochK, d: StochD },
+      bb: { upper: BB_Upper, middle: BB_Mid, lower: BB_Lower },
+      stochRsi: { K, D },
       adx: ADXVal
     }
   };
@@ -1141,18 +1129,23 @@ function renderResult(data) {
   document.querySelector("#indLonesomeRes").textContent = typeof ldown === "number" ? formatPrice(ldown) : ldown;
 
   // New Indicators
-  // BB
-  const bbU = ind.bb.upper ? formatPrice(ind.bb.upper) : "-";
-  const bbL = ind.bb.lower ? formatPrice(ind.bb.lower) : "-";
-  document.querySelector("#indBB").textContent = `${bbU} / ${bbL}`;
-
-  // Stoch
-  const sK = ind.stoch.k ? ind.stoch.k.toFixed(1) : "-";
-  const sD = ind.stoch.d ? ind.stoch.d.toFixed(1) : "-";
-  document.querySelector("#indStoch").textContent = `K:${sK} D:${sD}`;
-
-  // ADX
-  document.querySelector("#indADX").textContent = ind.adx ? ind.adx.toFixed(2) : "-";
+  // We need to match these IDs with index.html changes which we will do next
+  const bbEl = document.querySelector("#indBB");
+  if (bbEl) {
+    if (ind.bb && ind.bb.upper) {
+      bbEl.textContent = `${formatPrice(ind.bb.upper)} / ${formatPrice(ind.bb.lower)}`;
+    } else bbEl.textContent = "-";
+  }
+  const stochEl = document.querySelector("#indStoch");
+  if (stochEl) {
+    if (ind.stochRsi && ind.stochRsi.K) {
+      stochEl.textContent = `K ${ind.stochRsi.K.toFixed(1)} / D ${ind.stochRsi.D.toFixed(1)}`;
+    } else stochEl.textContent = "-";
+  }
+  const adxEl = document.querySelector("#indADX");
+  if (adxEl) {
+    adxEl.textContent = ind.adx ? ind.adx.toFixed(2) : "-";
+  }
 }
 
 /* ================= 5. DROPDOWN SEARCH LOGIC ================= */
