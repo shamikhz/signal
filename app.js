@@ -563,6 +563,17 @@ async function fetchAndAnalyze(symbol, interval) {
     const candles = parseBinanceKlines(raw);
 
     const { signal, indicators } = computeTradeSignal(candles);
+
+    // Calculate predicted validity duration
+    if (signal.action !== "hold" && indicators.atr14) {
+      const dist = Math.abs(signal.takeProfit - signal.entry);
+      const atr = indicators.atr14;
+      const candlesNeeded = atr > 0 ? dist / atr : 0;
+      signal.estDuration = candlesNeeded * intervalToSeconds(interval);
+    } else {
+      signal.estDuration = 0;
+    }
+
     const last = candles[candles.length - 1];
 
     // Fetch the shared model for prediction
@@ -821,6 +832,23 @@ function formatPrice(val) {
   return val > 50 ? val.toFixed(3) : val.toFixed(5);
 }
 
+function intervalToSeconds(interval) {
+  const num = parseInt(interval);
+  if (interval.endsWith("m")) return num * 60;
+  if (interval.endsWith("h")) return num * 3600;
+  if (interval.endsWith("d")) return num * 86400;
+  if (interval.endsWith("w")) return num * 604800;
+  return 60; // 1m default
+}
+
+function formatDuration(seconds) {
+  if (!seconds || seconds <= 0) return "--";
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  if (h > 0) return `~${h}h ${m}m`;
+  return `~${m}m`;
+}
+
 function renderResult(data) {
   document.querySelector("#resSymbol").textContent = `${data.symbol} (${data.interval})`;
 
@@ -843,6 +871,7 @@ function renderResult(data) {
   document.querySelector("#valEntry").textContent = formatPrice(data.signal.entry);
   document.querySelector("#valStop").textContent = formatPrice(Math.max(0, data.signal.stopLoss));
   document.querySelector("#valTP").textContent = formatPrice(Math.max(0, data.signal.takeProfit));
+  document.querySelector("#resValidity").textContent = formatDuration(data.signal.estDuration);
   document.querySelector("#valML").textContent = typeof data.mlProbability === 'number'
     ? `${(data.mlProbability * 100).toFixed(1)}%`
     : "N/A (Train Model)";
