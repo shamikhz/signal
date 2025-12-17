@@ -21,7 +21,7 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
-const MODEL_DOC_ID = "global_v1";
+const MODEL_DOC_ID = "global_v2";
 
 /* ================= TYPES & CONSTANTS ================= */
 const ALLOWED_INTERVALS = ["1m", "5m", "15m", "30m", "1h", "4h", "1d", "1w"];
@@ -498,6 +498,9 @@ function extractFeatures(candles) {
   const rsi14 = RSI(closes, 14);
   const macd = MACDSeries(closes, 12, 26, 9);
   const atr14 = ATR(candles, 14);
+  const bb = BollingerBands(closes, 20, 2);
+  const stochRsi = StochasticRSI(closes, 14, 14, 3, 3);
+  const adxLine = ADX(candles, 14);
 
   const last = candles[n];
   const prev = candles[n - 1] ?? last;
@@ -510,13 +513,26 @@ function extractFeatures(candles) {
   const macdHist = macd.histogram[n] ?? 0;
   const atr = atr14[n] ?? 0;
 
+  // New Indicators
+  const bbUpper = bb.upper[n] ?? price;
+  const bbLower = bb.lower[n] ?? price;
+  const k = stochRsi.K[n] ?? 50;
+  const adx = adxLine[n] ?? 0;
+
   const rsiNorm = (rsi - 50) / 50;
   const emaRatio = e200 ? e50 / e200 - 1 : 0;
   const macdNorm = macdHist / Math.max(price, 1e-6);
   const atrNorm = atr / Math.max(price, 1e-6);
   const aboveE50 = last.close > e50 ? 1 : 0;
 
-  return [ret1, rsiNorm, emaRatio, macdNorm, atrNorm, aboveE50];
+  // New Feature Normalization
+  const adxNorm = adx / 100; // 0-1 approx
+  const stochNorm = (k - 50) / 50; // -1 to 1 centered
+  const bbWidth = bbUpper - bbLower;
+  const bbPos = bbWidth > 0 ? (last.close - bbLower) / bbWidth : 0.5; // 0=Lower, 1=Upper
+  const bbPosNorm = (bbPos - 0.5) * 2; // -1 to 1
+
+  return [ret1, rsiNorm, emaRatio, macdNorm, atrNorm, aboveE50, stochNorm, bbPosNorm, adxNorm];
 }
 
 function checkTradeOutcome(candles, startIndex, entryPrice, stopLoss, takeProfit, isLong) {
@@ -785,6 +801,9 @@ function parseBinanceKlines(raw) {
 
 async function fetchAndAnalyze(symbol, interval) {
   try {
+    // Check network status first
+    if (typeof checkOnline === 'function') checkOnline();
+
     const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=500`;
     const res = await fetch(url);
     if (!res.ok) throw new Error("Failed to fetch from Binance. Check symbol or internet.");
@@ -1053,8 +1072,31 @@ function renderMarketList(elementId, items) {
 
 // Initial Fetch
 fetchMarketData();
-// Refresh every 1s
-setInterval(fetchMarketData, 1000);
+// Refresh every 10s (reduced from 1s to prevent rate limiting)
+setInterval(fetchMarketData, 10000);
+
+/* ================= NETWORK STATUS DETECTION ================= */
+let isOnline = navigator.onLine;
+
+window.addEventListener('online', () => {
+  isOnline = true;
+  console.log('Network connection restored');
+  // Refresh market data when back online
+  fetchMarketData();
+});
+
+window.addEventListener('offline', () => {
+  isOnline = false;
+  console.log('Network connection lost');
+  errorEl.textContent = 'No internet connection. Please check your network.';
+  errorEl.classList.remove('hidden');
+});
+
+function checkOnline() {
+  if (!isOnline) {
+    throw new Error('No internet connection. Please check your network.');
+  }
+}
 
 function formatPrice(val) {
   if (typeof val !== 'number') return "-";
@@ -1210,17 +1252,31 @@ function renderDropdown(items) {
   dropdown.classList.remove("hidden");
 }
 
-// Event Listeners
+// Event Listeners with debouncing for better performance
+let debounceTimer;
 const showDropdown = () => {
-  const query = symbolInput.value.trim();
-  // filterSymbols matches top 50 if query is empty
-  const filtered = filterSymbols(query);
-  renderDropdown(filtered);
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(() => {
+    const query = symbolInput.value.trim();
+    // filterSymbols matches top 50 if query is empty
+    const filtered = filterSymbols(query);
+    renderDropdown(filtered);
+  }, 150); // 150ms debounce
 };
 
 symbolInput.addEventListener("input", showDropdown);
-symbolInput.addEventListener("focus", showDropdown);
-symbolInput.addEventListener("click", showDropdown);
+symbolInput.addEventListener("focus", () => {
+  clearTimeout(debounceTimer);
+  const query = symbolInput.value.trim();
+  const filtered = filterSymbols(query);
+  renderDropdown(filtered);
+});
+symbolInput.addEventListener("click", () => {
+  clearTimeout(debounceTimer);
+  const query = symbolInput.value.trim();
+  const filtered = filterSymbols(query);
+  renderDropdown(filtered);
+});
 
 // Hide dropdown when clicking outside
 document.addEventListener("click", (e) => {

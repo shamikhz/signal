@@ -3,7 +3,23 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <meta name="description"
+        content="Advanced cryptocurrency trading signals with ML-powered predictions and technical analysis">
+    <meta name="theme-color" content="#0d0d11">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Crypto Signals">
+
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="manifest.json">
+
+    <!-- Favicon and Icons -->
+    <link rel="icon" type="image/png" sizes="192x192"
+        href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📈</text></svg>">
+    <link rel="apple-touch-icon"
+        href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📈</text></svg>">
+
     <title>Crypto Signal Master</title>
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -37,12 +53,14 @@
                     <div class="input-wrapper" style="position:relative;">
                         <label for="symbolInput">Symbol</label>
                         <input type="text" id="symbolInput" value="BTCUSDT" placeholder="e.g. BTCUSDT"
-                            autocomplete="off" required>
-                        <ul id="symbolDropdown" class="dropdown-list hidden"></ul>
+                            autocomplete="off" required aria-label="Cryptocurrency symbol"
+                            aria-describedby="symbolHelp">
+                        <ul id="symbolDropdown" class="dropdown-list hidden" role="listbox"
+                            aria-label="Symbol suggestions"></ul>
                     </div>
                     <div class="input-wrapper">
                         <label for="intervalInput">Interval</label>
-                        <select id="intervalInput">
+                        <select id="intervalInput" aria-label="Time interval for analysis">
                             <option value="1m">1m</option>
                             <option value="5m">5m</option>
                             <option value="15m">15m</option>
@@ -53,9 +71,10 @@
                             <option value="1w">1w</option>
                         </select>
                     </div>
-                    <button type="submit" id="submitBtn">Get Signal</button>
+                    <button type="submit" id="submitBtn" aria-label="Analyze and get trading signal">Get Signal</button>
                     <button type="button" id="trainBtn"
-                        style="background-color:var(--card-border); color:var(--text-secondary);">Train Model</button>
+                        style="background-color:var(--card-border); color:var(--text-secondary);"
+                        aria-label="Train machine learning model">Train Model</button>
                     <span id="trainStatus"
                         style="font-size: 0.8rem; color: var(--success-color); margin-left: 10px; display: none;"></span>
                 </div>
@@ -158,6 +177,21 @@
     </main>
 
     <script type="module" src="app.js"></script>
+
+    <!-- Service Worker Registration -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/service-worker.js')
+                    .then((registration) => {
+                        console.log('ServiceWorker registered:', registration.scope);
+                    })
+                    .catch((error) => {
+                        console.log('ServiceWorker registration failed:', error);
+                    });
+            });
+        }
+    </script>
 </body>
 
 </html>
