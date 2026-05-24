@@ -954,6 +954,7 @@ function getTrainingKey(symbol, interval) {
 }
 
 function updateTrainUI() {
+  if (!trainBtn || !trainStatusEl) return;
   const symbol = document.querySelector("#symbolInput").value.toUpperCase();
   const interval = document.querySelector("#intervalInput").value;
   const key = getTrainingKey(symbol, interval);
@@ -977,33 +978,35 @@ document.querySelector("#intervalInput").addEventListener("change", updateTrainU
 // Initial State Check
 updateTrainUI();
 
-trainBtn.addEventListener("click", async () => {
-  const symbol = document.querySelector("#symbolInput").value.toUpperCase();
-  const interval = document.querySelector("#intervalInput").value;
+if (trainBtn) {
+  trainBtn.addEventListener("click", async () => {
+    const symbol = document.querySelector("#symbolInput").value.toUpperCase();
+    const interval = document.querySelector("#intervalInput").value;
 
-  const originalText = trainBtn.textContent;
-  trainBtn.textContent = "Training (Shared)...";
-  trainBtn.disabled = true;
-  errorEl.classList.add("hidden");
+    const originalText = trainBtn.textContent;
+    trainBtn.textContent = "Training (Shared)...";
+    trainBtn.disabled = true;
+    errorEl.classList.add("hidden");
 
-  try {
-    const res = await trainModel(symbol, interval);
-    alert(`Shared Training Complete!\nProcessed Trades: ${res.trainedCount}\nAvg Loss: ${res.avgLoss.toFixed(4)}\n\nThe global model in Firestore has been updated.`);
+    try {
+      const res = await trainModel(symbol, interval);
+      alert(`Shared Training Complete!\nProcessed Trades: ${res.trainedCount}\nAvg Loss: ${res.avgLoss.toFixed(4)}\n\nThe global model in Firestore has been updated.`);
 
-    // Save to local storage
-    const key = getTrainingKey(symbol, interval);
-    localStorage.setItem(key, res.avgLoss.toString());
-    updateTrainUI();
+      // Save to local storage
+      const key = getTrainingKey(symbol, interval);
+      localStorage.setItem(key, res.avgLoss.toString());
+      updateTrainUI();
 
-  } catch (err) {
-    errorEl.textContent = `Training Error: ${err.message}`;
-    errorEl.classList.remove("hidden");
-    console.error(err);
-  } finally {
-    trainBtn.textContent = originalText;
-    trainBtn.disabled = false;
-  }
-});
+    } catch (err) {
+      errorEl.textContent = `Training Error: ${err.message}`;
+      errorEl.classList.remove("hidden");
+      console.error(err);
+    } finally {
+      trainBtn.textContent = originalText;
+      trainBtn.disabled = false;
+    }
+  });
+}
 
 /* ================= MARKET OVERVIEW LOGIC ================= */
 
